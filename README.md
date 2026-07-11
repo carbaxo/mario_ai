@@ -1,6 +1,6 @@
 # FutMon World
 
-RPG web de exploración para móvil. Recorre un mundo pixelado, encuentra futbolistas en las zonas de entrenamiento, enfréntate a ellos por turnos y fíchalos con balones contrato.
+RPG web de exploración para móvil. Recorre un mundo pixelado de 48×48 casillas con cuatro regiones, encuentra futbolistas propios de cada zona, abre cofres, compra balones contrato y forma tu equipo.
 
 ## Jugar
 
