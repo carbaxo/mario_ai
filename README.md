@@ -1,6 +1,6 @@
-# FutMon — Cazadores de Estrellas
+# FutMon World
 
-Juego web para móvil inspirado en los juegos de colección y aventura. Explora, encuentra futbolistas, supera el reto de precisión y crea tu equipo.
+RPG web de exploración para móvil. Recorre un mundo pixelado, encuentra futbolistas en las zonas de entrenamiento, enfréntate a ellos por turnos y fíchalos con balones contrato.
 
 ## Jugar
 
@@ -13,7 +13,7 @@ No necesita instalación ni servidor:
 1. Descarga el repositorio.
 2. Abre `index.html` en el navegador.
 
-El progreso se guarda localmente en el dispositivo mediante `localStorage`.
+El progreso, equipo, posición y balones se guardan localmente mediante `localStorage`.
 
 ## Publicación
 
