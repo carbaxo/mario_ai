@@ -1,96 +1,10 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#07162c" />
-  <meta name="description" content="FutMon: explora, ficha estrellas y crea tu equipo." />
-  <title>FutMon — Cazadores de Estrellas</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <main class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Cazadores de estrellas</p>
-        <h1>Fut<span>Mon</span></h1>
-      </div>
-      <div class="wallet" aria-label="Monedas disponibles"><span>⚽</span><strong id="coins">0</strong></div>
-    </header>
-
-    <section class="screen active" id="home-screen">
-      <div class="hero-card">
-        <div class="stadium-glow"></div>
-        <div class="ball" aria-hidden="true">⚽</div>
-        <p class="kicker">Tu aventura empieza aquí</p>
-        <h2>Encuentra estrellas.<br />Crea tu once.</h2>
-        <p>Explora estadios, supera retos y convence a los mejores futbolistas para unirse a tu equipo.</p>
-        <button class="primary big" id="explore-btn">Explorar el estadio</button>
-      </div>
-      <div class="stats-row">
-        <article><strong id="collection-count">0</strong><span>Fichados</span></article>
-        <article><strong id="team-power">0</strong><span>Potencia</span></article>
-        <article><strong id="discoveries">0</strong><span>Encuentros</span></article>
-      </div>
-      <div class="daily-card">
-        <div><span class="daily-icon">🎁</span><div><strong>Bonus diario</strong><small>Vuelve cada día para conseguir monedas</small></div></div>
-        <button id="daily-btn">Recoger</button>
-      </div>
-    </section>
-
-    <section class="screen" id="encounter-screen">
-      <div class="encounter-stage">
-        <button class="icon-button back-home" aria-label="Volver">←</button>
-        <p class="eyebrow">¡Encuentro salvaje!</p>
-        <div class="player-card" id="encounter-card">
-          <div class="rarity" id="encounter-rarity">ÉLITE</div>
-          <div class="rating" id="encounter-rating">90</div>
-          <div class="avatar" id="encounter-avatar">KY</div>
-          <div class="flag" id="encounter-flag">🇫🇷</div>
-          <h2 id="encounter-name">Kylian Mbappé</h2>
-          <p id="encounter-position">DELANTERO</p>
-          <div class="skill-bars" id="skill-bars"></div>
-        </div>
-        <div class="challenge">
-          <p>Para ficharlo, detén el marcador en la zona verde.</p>
-          <div class="meter"><div class="target"></div><div class="marker" id="marker"></div></div>
-          <button class="primary big" id="shoot-btn">¡Disparar!</button>
-          <button class="secondary" id="skip-btn">Seguir explorando</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="screen" id="collection-screen">
-      <div class="section-heading"><div><p class="eyebrow">Álbum</p><h2>Mis jugadores</h2></div><span id="album-progress">0 / 0</span></div>
-      <div class="filters" id="filters">
-        <button class="active" data-filter="ALL">Todos</button><button data-filter="DEL">DEL</button><button data-filter="MED">MED</button><button data-filter="DEF">DEF</button><button data-filter="POR">POR</button>
-      </div>
-      <div class="player-grid" id="player-grid"></div>
-    </section>
-
-    <section class="screen" id="team-screen">
-      <div class="section-heading"><div><p class="eyebrow">Alineación</p><h2>Mi equipo</h2></div><span><strong id="team-rating">0</strong> GRL</span></div>
-      <div class="pitch">
-        <div class="pitch-line center-line"></div><div class="pitch-line center-circle"></div>
-        <div class="formation" id="formation"></div>
-      </div>
-      <p class="team-hint">Toca un jugador de tu colección para añadirlo. Máximo 5 estrellas.</p>
-      <button class="secondary danger" id="clear-team">Vaciar equipo</button>
-    </section>
-
-    <div class="toast" id="toast" role="status"></div>
-    <div class="modal" id="result-modal" aria-hidden="true">
-      <div class="modal-card"><div class="result-icon" id="result-icon">🏆</div><h2 id="result-title">¡Fichaje completado!</h2><p id="result-copy"></p><button class="primary" id="result-close">Continuar</button></div>
-    </div>
-
-    <nav class="bottom-nav" aria-label="Navegación principal">
-      <button class="active" data-screen="home-screen"><span>⌂</span>Inicio</button>
-      <button data-screen="collection-screen"><span>▦</span>Álbum</button>
-      <button class="explore-nav" id="nav-explore"><span>⚽</span></button>
-      <button data-screen="team-screen"><span>♟</span>Equipo</button>
-      <button id="sound-toggle"><span>♪</span>Sonido</button>
-    </nav>
-  </main>
-  <script src="app.js"></script>
-</body>
-</html>
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#111827"><title>FutMon World</title><link rel="stylesheet" href="styles.css"></head><body>
+<main id="game-shell">
+ <header><div><small>FUTMON WORLD</small><strong id="zone-name">Villa Cantera</strong></div><div class="hud-pill">⚽ <b id="ball-count">5</b></div></header>
+ <section id="world-view" class="view active"><canvas id="world" width="480" height="480" aria-label="Mundo FutMon"></canvas><div id="world-message" class="message">Usa los controles para explorar</div><div class="controls"><div class="dpad"><button data-dir="up">▲</button><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div><button id="action-btn" class="action">A</button></div></section>
+ <section id="battle-view" class="view"><div class="battlefield"><div class="crowd"></div><article class="fighter rival"><div class="nameplate"><b id="rival-name"></b><span>NV. <i id="rival-level"></i></span><div class="hp"><i id="rival-hp"></i></div></div><canvas id="rival-sprite" width="128" height="128"></canvas></article><article class="fighter hero"><canvas id="hero-sprite" width="128" height="128"></canvas><div class="nameplate"><b id="hero-name"></b><span>NV. <i id="hero-level"></i></span><div class="hp"><i id="hero-hp"></i></div><small><span id="hero-hp-text"></span></small></div></article></div><div class="battle-box"><p id="battle-text">¡Un jugador estrella quiere medirse contigo!</p><div class="battle-menu" id="battle-menu"><button data-move="dribble">Regate</button><button data-move="shot">Disparo</button><button data-move="press">Presión</button><button id="contract-btn">⚽ Fichar</button><button id="run-btn">Huir</button></div></div></section>
+ <section id="team-view" class="view panel"><div class="panel-title"><div><small>VESTUARIO</small><h1>Mi equipo</h1></div><button class="close-panel">×</button></div><div id="team-list"></div></section>
+ <section id="help-view" class="view panel"><div class="panel-title"><div><small>GUÍA</small><h1>Cómo jugar</h1></div><button class="close-panel">×</button></div><div class="help"><p>Explora el mapa y camina por el césped alto. Allí encontrarás futbolistas.</p><p>Debilita su energía con tus jugadas. Cuando esté baja, lanza un <b>balón contrato</b> para ficharlo.</p><p>Visita el centro médico marcado con una cruz para recuperar a tu capitán.</p><p>Controles: cruceta o flechas/WASD. Pulsa A o espacio para hablar e interactuar.</p></div></section>
+ <nav><button id="nav-world" class="active">🗺️<span>Mundo</span></button><button id="nav-team">👥<span>Equipo</span></button><button id="nav-help">❔<span>Guía</span></button></nav>
+ <div id="dialog" class="dialog"><p id="dialog-text"></p><button id="dialog-next">Continuar</button></div><div id="flash"></div>
+</main><script src="app.js"></script></body></html>
