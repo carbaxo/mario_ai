@@ -14,6 +14,17 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const randi = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 // Ruido determinista barato: mismo (x,y,s) → mismo valor, para decorar el mapa.
 const noise = (x, y, s = 0) => { const n = Math.sin(x * 127.1 + y * 311.7 + s * 91.3) * 43758.5453; return n - Math.floor(n); };
+// Rectángulo redondeado (compatible con navegadores sin ctx.roundRect).
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+const INK = '#1c2438'; // contorno oscuro estilo cartoon
 
 /* ---------------- Constantes del mundo ---------------- */
 const TILE = 48;                 // píxeles por casilla en el canvas
@@ -56,7 +67,7 @@ for (let y = 34; y < WORLD - 3; y++) for (let x = 34; x < WORLD - 3; x++)
   if (MAP[y][x] === 'd' && noise(x, y, 7) > .94) MAP[y][x] = 'L';
 
 const SIGNS = {
-  '11,13': 'Villa Cantera — donde nacen las leyendas. El centro médico (cruz roja) cura gratis.',
+  '11,13': 'Villa Cantera — donde nacen las leyendas. Si pierdes un partido, despertarás en el centro médico (cruz roja).',
   '34,19': 'Estadio Central — solo los mejores ojeadores ganan aquí. Rivales de élite.',
   '14,38': 'Bosque Cantera — hogar de cerebros del mediocampo y defensas de hierro.',
   '43,14': 'Ciudad Solar — velocidad y desborde bajo el sol.',
@@ -122,12 +133,6 @@ const CHAPTERS = [
   { title: 'La Copa de las Leyendas', emoji: '🏆', objective: 'Vence a Sombra en la final del estadio.', copy: 'Todo termina donde empezó: el Estadio Central. Sombra ha reunido su propio equipo oscuro y te espera para la final. Gana y el fútbol volverá a ser libre.' },
 ];
 
-// Movimientos del jugador en el duelo.
-const MOVES = {
-  dribble: { name: 'Regate', min: 14, max: 24 },
-  shot:    { name: 'Disparo', min: 24, max: 40, miss: .2 },
-  press:   { name: 'Presión', min: 8, max: 14, shield: 12 },
-};
 // Triángulo de posiciones: quién supera a quién.
 const BEATS = { DEL: 'MED', MED: 'DEF', DEF: 'DEL' };
 
@@ -186,6 +191,9 @@ const SFX = {
   fail: [[233, 0, .12], [185, .13, .18]],
   story: [[392, 0, .1], [523, .12, .18]],
   boss: [[110, 0, .2], [104, .22, .3]],
+  goal: [[392, 0, .07], [523, .08, .07], [659, .16, .22]],
+  concede: [[311, 0, .1], [262, .11, .1], [208, .22, .2]],
+  whistle: [[1568, 0, .09], [1568, .13, .18]],
 };
 function sfx(name) {
   if (state.muted || !SFX[name]) return;
@@ -239,10 +247,10 @@ const dialogOpen = () => $('#dialog').classList.contains('show') || $('#shop').c
 
 /* ---------------- Render del mundo ---------------- */
 const GROUND = {
-  '.': ['#6cb851', '#64ae4a', '#4f9840'], G: ['#5da345', '#549a40', '#3d7f33'],
-  s: ['#e0c476', '#d8ba6a', '#c2a254'], S: ['#d4ae55', '#caa14b', '#a8823a'],
-  a: ['#4f9147', '#478540', '#356b31'], A: ['#3f7f3e', '#387539', '#2a5c2c'],
-  d: ['#5e5385', '#564b7b', '#453b68'], D: ['#4c4272', '#453b68', '#352d57'],
+  '.': ['#7ed957', '#73cf4d', '#57b13a'], G: ['#63c247', '#59b63e', '#3f9a2e'],
+  s: ['#ffd97a', '#f7cf6c', '#dfb254'], S: ['#f2c256', '#e7b54b', '#c89937'],
+  a: ['#57b658', '#4daa4e', '#37903b'], A: ['#42a047', '#3b9540', '#2b7b32'],
+  d: ['#6a5ba2', '#615297', '#4e4182'], D: ['#564988', '#4e417c', '#3e3469'],
 };
 const camera = () => [
   clamp(player.px + TILE / 2 - VIEW_W * TILE / 2, 0, WORLD * TILE - VIEW_W * TILE),
@@ -271,32 +279,39 @@ function drawGroundDecor(px, py, key, wx, wy) {
 function drawTallGrass(px, py, key, wx, wy, time) {
   const pal = GROUND[key];
   ctx.fillStyle = pal[2] + '55'; ctx.fillRect(px, py + TILE - 10, TILE, 10);
-  ctx.lineWidth = 2; ctx.strokeStyle = pal[0];
-  for (let i = 7; i < TILE - 3; i += 9) {
+  ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = pal[0];
+  for (let i = 8; i < TILE - 4; i += 10) {
     const sway = Math.sin(time / 320 + wx * 2 + i) * 2.5;
     ctx.beginPath();
-    ctx.moveTo(px + i, py + TILE - 3);
-    ctx.quadraticCurveTo(px + i + sway, py + TILE - 16, px + i + sway * 1.7, py + TILE - 29);
+    ctx.moveTo(px + i, py + TILE - 4);
+    ctx.quadraticCurveTo(px + i + sway, py + TILE - 16, px + i + sway * 1.7, py + TILE - 28);
     ctx.stroke();
   }
+  ctx.lineCap = 'butt';
 }
+// Arbusto redondeado con contorno grueso, al estilo cartoon.
 function drawTree(px, py, wx, wy) {
-  const n = noise(wx, wy, 2), ox = (n - .5) * 4;
-  ctx.fillStyle = '#275c36'; ctx.fillRect(px, py, TILE, TILE);
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.beginPath(); ctx.ellipse(px + 24, py + 42, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#6b4a2c'; ctx.fillRect(px + 20, py + 26, 8, 16);
-  ctx.fillStyle = '#245f31';
-  ctx.beginPath(); ctx.arc(px + 24 + ox, py + 20, 18, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#2f7d3f';
-  ctx.beginPath(); ctx.arc(px + 24 + ox, py + 17, 15, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#45a052';
-  ctx.beginPath(); ctx.arc(px + 18 + ox, py + 12, 8, 0, Math.PI * 2); ctx.fill();
+  const n = noise(wx, wy, 2), ox = (n - .5) * 5;
+  ctx.fillStyle = '#57b13a'; ctx.fillRect(px, py, TILE, TILE);
+  ctx.fillStyle = 'rgba(15,50,20,.3)';
+  ctx.beginPath(); ctx.ellipse(px + 24, py + 41, 19, 6, 0, 0, Math.PI * 2); ctx.fill();
+  const blobs = [[24 + ox, 24, 16], [11, 31, 11], [37, 30, 11]];
+  ctx.fillStyle = '#1e6b28'; // contorno
+  blobs.forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(px + x, py + y, r + 3, 0, Math.PI * 2); ctx.fill(); });
+  ctx.fillStyle = '#33a44b';
+  blobs.forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(px + x, py + y, r, 0, Math.PI * 2); ctx.fill(); });
+  ctx.fillStyle = '#5bcf72'; // brillos arriba-izquierda
+  blobs.forEach(([x, y, r]) => { ctx.beginPath(); ctx.arc(px + x - r * .3, py + y - r * .35, r * .45, 0, Math.PI * 2); ctx.fill(); });
+  if (n > .72) { // bayas
+    ctx.fillStyle = '#ff5b7d';
+    ctx.beginPath(); ctx.arc(px + 18 + ox, py + 22, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + 31 + ox, py + 29, 3, 0, Math.PI * 2); ctx.fill();
+  }
 }
 function drawWater(px, py, wx, wy, time) {
-  ctx.fillStyle = '#2b76bd'; ctx.fillRect(px, py, TILE, TILE);
-  if (noise(wx, wy) > .6) { ctx.fillStyle = '#286fb2'; ctx.fillRect(px + 8, py + 8, 30, 30); }
-  ctx.strokeStyle = '#8fd4ef'; ctx.lineWidth = 2;
+  ctx.fillStyle = '#38a1f2'; ctx.fillRect(px, py, TILE, TILE);
+  if (noise(wx, wy) > .6) { ctx.fillStyle = '#3195e4'; ctx.fillRect(px + 8, py + 8, 30, 30); }
+  ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
   for (const row of [14, 34]) {
     const o = Math.sin(time / 380 + wy + row) * 4;
     ctx.beginPath();
@@ -305,28 +320,29 @@ function drawWater(px, py, wx, wy, time) {
     ctx.quadraticCurveTo(px + 36, py + row + 4 + o * .4, px + 48, py + row + o * .4);
     ctx.stroke();
   }
+  ctx.lineCap = 'butt';
   // Espuma en el borde con tierra.
-  ctx.fillStyle = '#dff4fbcc';
+  ctx.fillStyle = '#eaf9ff';
   const land = (x, y) => !['W', 'B'].includes(tile(x, y));
-  if (land(wx - 1, wy)) ctx.fillRect(px, py, 3, TILE);
-  if (land(wx + 1, wy)) ctx.fillRect(px + TILE - 3, py, 3, TILE);
-  if (land(wx, wy - 1)) ctx.fillRect(px, py, TILE, 3);
-  if (land(wx, wy + 1)) ctx.fillRect(px, py + TILE - 3, TILE, 3);
+  if (land(wx - 1, wy)) ctx.fillRect(px, py, 4, TILE);
+  if (land(wx + 1, wy)) ctx.fillRect(px + TILE - 4, py, 4, TILE);
+  if (land(wx, wy - 1)) ctx.fillRect(px, py, TILE, 4);
+  if (land(wx, wy + 1)) ctx.fillRect(px, py + TILE - 4, TILE, 4);
 }
 function drawBridge(px, py, wx, wy, time) {
   drawWater(px, py, wx, wy, time);
-  ctx.fillStyle = '#a87a45'; ctx.fillRect(px, py + 6, TILE, 36);
-  ctx.fillStyle = '#8a5f36';
-  for (let i = 6; i < TILE; i += 9) ctx.fillRect(px + i, py + 6, 2, 36);
-  ctx.fillStyle = '#5d3f22'; ctx.fillRect(px, py + 3, TILE, 4); ctx.fillRect(px, py + 41, TILE, 4);
+  ctx.fillStyle = '#c08a4e'; ctx.fillRect(px, py + 7, TILE, 34);
+  ctx.fillStyle = '#a3713c';
+  for (let i = 6; i < TILE; i += 9) ctx.fillRect(px + i, py + 7, 3, 34);
+  ctx.fillStyle = INK; ctx.fillRect(px, py + 4, TILE, 4); ctx.fillRect(px, py + 40, TILE, 4);
 }
 function drawRoad(px, py, wx, wy) {
-  ctx.fillStyle = '#dbc389'; ctx.fillRect(px, py, TILE, TILE);
+  ctx.fillStyle = '#f2dc96'; ctx.fillRect(px, py, TILE, TILE);
   const n = noise(wx, wy, 4);
-  ctx.fillStyle = '#c3a86d';
+  ctx.fillStyle = '#dcc178';
   ctx.fillRect(px + (n * 34 | 0), py + (n * 28 | 0) + 6, 4, 3);
   ctx.fillRect(px + ((1 - n) * 30 | 0) + 6, py + (n * 36 | 0), 3, 3);
-  ctx.fillStyle = '#b89a5e';
+  ctx.fillStyle = '#cbaf64';
   const path = (x, y) => ['R', 'B', 'H', 'M', 'F'].includes(tile(x, y));
   if (!path(wx - 1, wy)) ctx.fillRect(px, py, 3, TILE);
   if (!path(wx + 1, wy)) ctx.fillRect(px + TILE - 3, py, 3, TILE);
@@ -334,47 +350,57 @@ function drawRoad(px, py, wx, wy) {
   if (!path(wx, wy + 1)) ctx.fillRect(px, py + TILE - 3, TILE, 3);
 }
 function drawField(px, py, wx) {
-  ctx.fillStyle = wx % 2 ? '#4ea24e' : '#58b258';
+  ctx.fillStyle = wx % 2 ? '#54b944' : '#5fc74e';
   ctx.fillRect(px, py, TILE, TILE);
 }
 function drawBuilding(px, py, type) {
   // base de hierba detrás del edificio
-  ctx.fillStyle = '#6cb851'; ctx.fillRect(px, py, TILE, TILE);
-  ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(px + 4, py + 42, 42, 5);
-  const wall = type === 'H' ? '#f4efdd' : '#f5dfa0';
-  ctx.fillStyle = wall; ctx.fillRect(px + 4, py + 16, 40, 28);
-  // tejado
-  ctx.fillStyle = type === 'H' ? '#cf5050' : '#3c70d7';
-  ctx.beginPath(); ctx.moveTo(px, py + 18); ctx.lineTo(px + 24, py + 2); ctx.lineTo(px + 48, py + 18); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#7ed957'; ctx.fillRect(px, py, TILE, TILE);
+  ctx.fillStyle = 'rgba(15,50,20,.28)';
+  ctx.beginPath(); ctx.ellipse(px + 24, py + 44, 21, 5, 0, 0, Math.PI * 2); ctx.fill();
+  const wall = type === 'H' ? '#fdf7e6' : '#ffe9a8';
+  ctx.fillStyle = wall; rr(ctx, px + 4, py + 16, 40, 28, 6); ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(ctx, px + 4, py + 16, 40, 28, 6); ctx.stroke();
+  // tejado redondeado
+  ctx.fillStyle = type === 'H' ? '#ff6b6b' : '#3d9df6';
+  ctx.beginPath(); ctx.moveTo(px - 1, py + 18); ctx.quadraticCurveTo(px + 24, py - 8, px + 49, py + 18);
+  ctx.lineTo(px + 43, py + 21); ctx.quadraticCurveTo(px + 24, py + 4, px + 5, py + 21); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = INK; ctx.stroke();
   // puerta y ventanas
-  ctx.fillStyle = '#7b5b3d'; ctx.fillRect(px + 20, py + 32, 9, 12);
-  ctx.fillStyle = '#9cc9e8'; ctx.fillRect(px + 8, py + 24, 8, 7); ctx.fillRect(px + 33, py + 24, 8, 7);
-  ctx.strokeStyle = '#00000033'; ctx.strokeRect(px + 8, py + 24, 8, 7); ctx.strokeRect(px + 33, py + 24, 8, 7);
+  ctx.fillStyle = '#8a6142'; rr(ctx, px + 20, py + 32, 9, 12, 3); ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 2; rr(ctx, px + 20, py + 32, 9, 12, 3); ctx.stroke();
+  ctx.fillStyle = '#aee1ff';
+  rr(ctx, px + 8, py + 23, 8, 8, 3); ctx.fill(); rr(ctx, px + 8, py + 23, 8, 8, 3); ctx.stroke();
+  rr(ctx, px + 33, py + 23, 8, 8, 3); ctx.fill(); rr(ctx, px + 33, py + 23, 8, 8, 3); ctx.stroke();
   if (type === 'H') { // cruz médica
-    ctx.fillStyle = 'white'; ctx.fillRect(px + 19, py + 17, 11, 11);
-    ctx.fillStyle = '#d94b4b'; ctx.fillRect(px + 23, py + 18, 3, 9); ctx.fillRect(px + 20, py + 21, 9, 3);
+    ctx.fillStyle = 'white'; rr(ctx, px + 18, py + 16, 13, 13, 4); ctx.fill();
+    rr(ctx, px + 18, py + 16, 13, 13, 4); ctx.stroke();
+    ctx.fillStyle = '#ff5b5b'; ctx.fillRect(px + 23, py + 18, 3, 9); ctx.fillRect(px + 20, py + 21, 9, 3);
   } else { // toldo de tienda
-    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#f7f2ea' : '#d95555'; ctx.fillRect(px + 4 + i * 7, py + 15, 7, 6); }
-    ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚽', px + 24, py + 30);
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#fff6e8' : '#ff6b6b'; ctx.fillRect(px + 4 + i * 7, py + 14, 7, 7); }
+    ctx.strokeStyle = INK; ctx.strokeRect(px + 4, py + 14, 42, 7);
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚽', px + 24, py + 31);
   }
 }
 function drawSign(px, py, wx, wy) {
   groundBase(px, py, '.', wx, wy);
-  ctx.fillStyle = '#7a522d'; ctx.fillRect(px + 22, py + 22, 5, 18);
-  ctx.fillStyle = '#c89858'; ctx.fillRect(px + 10, py + 8, 28, 16);
-  ctx.strokeStyle = '#7a522d'; ctx.lineWidth = 2; ctx.strokeRect(px + 10, py + 8, 28, 16);
-  ctx.fillStyle = '#5a3c1e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#8a6142'; rr(ctx, px + 21, py + 20, 6, 20, 2); ctx.fill();
+  ctx.fillStyle = '#e0aa5f'; rr(ctx, px + 9, py + 7, 30, 17, 5); ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 3; rr(ctx, px + 9, py + 7, 30, 17, 5); ctx.stroke();
+  ctx.fillStyle = INK; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('i', px + 24, py + 20);
 }
 function drawLamp(px, py, wx, wy, time) {
   groundBase(px, py, 'd', wx, wy);
-  ctx.fillStyle = '#3a3554'; ctx.fillRect(px + 22, py + 12, 4, 32);
+  ctx.fillStyle = '#39325c'; rr(ctx, px + 21, py + 12, 6, 32, 3); ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = INK; rr(ctx, px + 21, py + 12, 6, 32, 3); ctx.stroke();
   const pulse = .6 + Math.sin(time / 400 + wx) * .2;
   const grad = ctx.createRadialGradient(px + 24, py + 10, 2, px + 24, py + 10, 20);
   grad.addColorStop(0, `rgba(255,220,110,${pulse})`);
   grad.addColorStop(1, 'rgba(255,220,110,0)');
   ctx.fillStyle = grad; ctx.fillRect(px + 4, py - 10, 40, 40);
-  ctx.fillStyle = '#ffd45c'; ctx.fillRect(px + 20, py + 6, 8, 7);
+  ctx.fillStyle = '#ffce3c'; rr(ctx, px + 19, py + 5, 10, 9, 4); ctx.fill();
+  ctx.strokeStyle = INK; rr(ctx, px + 19, py + 5, 10, 9, 4); ctx.stroke();
 }
 function drawTile(px, py, t, wx, wy, time) {
   switch (t) {
@@ -396,7 +422,7 @@ function drawFieldMarkings(camX, camY) {
   const x0 = FIELD.x0 * TILE - camX, y0 = FIELD.y0 * TILE - camY;
   const w = (FIELD.x1 - FIELD.x0 + 1) * TILE, h = (FIELD.y1 - FIELD.y0 + 1) * TILE;
   if (x0 > canvas.width || y0 > canvas.height || x0 + w < 0 || y0 + h < 0) return;
-  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 4;
   ctx.strokeRect(x0 + 6, y0 + 6, w - 12, h - 12);
   const cx = x0 + w / 2, cy = y0 + h / 2;
   ctx.beginPath(); ctx.moveTo(cx, y0 + 6); ctx.lineTo(cx, y0 + h - 6); ctx.stroke();
@@ -405,61 +431,83 @@ function drawFieldMarkings(camX, camY) {
   ctx.strokeRect(x0 + w - 68, cy - 66, 62, 132);            // área derecha
 }
 
-/* Sprite de personaje de 48px, cuatro direcciones y paso animado. */
-function drawActor(px, py, look, dir, phase, walking, opts = {}) {
-  const bob = walking ? Math.sin(phase) * 1.6 : Math.sin(animTime / 600 + px) * .6;
+/* Sprite chibi de 48px estilo cartoon: cabezota, ojos grandes, contorno
+   grueso y salto al andar. Cuatro direcciones (la derecha se refleja).
+   Recibe el contexto para poder dibujarse en el mundo y en el mini-campo. */
+function drawActor(c, px, py, look, dir, phase, walking, opts = {}) {
+  const bob = walking ? -Math.abs(Math.sin(phase)) * 3 : Math.sin(animTime / 550 + px) * .8;
   const flip = dir === 'right';
-  ctx.save();
-  if (flip) { ctx.translate(px * 2 + TILE, 0); ctx.scale(-1, 1); }
+  c.save();
+  if (flip) { c.translate(px * 2 + TILE, 0); c.scale(-1, 1); }
   if (opts.aura) {
-    const g = ctx.createRadialGradient(px + 24, py + 28, 4, px + 24, py + 28, 26);
-    g.addColorStop(0, 'rgba(255,51,85,.25)'); g.addColorStop(1, 'rgba(255,51,85,0)');
-    ctx.fillStyle = g; ctx.fillRect(px - 4, py - 4, 56, 56);
+    const g = c.createRadialGradient(px + 24, py + 28, 4, px + 24, py + 28, 26);
+    g.addColorStop(0, 'rgba(255,51,85,.28)'); g.addColorStop(1, 'rgba(255,51,85,0)');
+    c.fillStyle = g; c.fillRect(px - 4, py - 4, 56, 56);
   }
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
-  ctx.beginPath(); ctx.ellipse(px + 24, py + 44, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
-  // piernas
+  c.fillStyle = 'rgba(0,0,0,.3)';
+  c.beginPath(); c.ellipse(px + 24, py + 45, 13, 4.5, 0, 0, Math.PI * 2); c.fill();
+  c.lineWidth = 2.5; c.strokeStyle = INK;
+  // piernas cortitas
   const step = walking ? Math.sin(phase) * 3 : 0;
-  ctx.fillStyle = '#20283a';
+  c.fillStyle = '#2a3550';
   if (dir === 'left' || dir === 'right') {
-    ctx.fillRect(px + 15 + step, py + 34, 7, 11);
-    ctx.fillRect(px + 26 - step, py + 34, 7, 11);
+    rr(c, px + 14 + step, py + 37, 8, 9, 3); c.fill(); c.stroke();
+    rr(c, px + 26 - step, py + 37, 8, 9, 3); c.fill(); c.stroke();
   } else {
-    ctx.fillRect(px + 15, py + 34 + Math.max(0, step), 7, 11 - Math.max(0, step));
-    ctx.fillRect(px + 26, py + 34 + Math.max(0, -step), 7, 11 - Math.max(0, -step));
+    rr(c, px + 14, py + 37 + Math.max(0, step), 8, 9 - Math.max(0, step) * .5, 3); c.fill(); c.stroke();
+    rr(c, px + 26, py + 37 + Math.max(0, -step), 8, 9 - Math.max(0, -step) * .5, 3); c.fill(); c.stroke();
   }
-  // cuerpo
-  ctx.fillStyle = look.suit; ctx.fillRect(px + 12, py + 20 + bob, 24, 16);
-  ctx.fillStyle = look.accent; ctx.fillRect(px + 22, py + 20 + bob, 4, 16);
-  ctx.fillStyle = look.suit; ctx.fillRect(px + 8, py + 22 + bob, 5, 11); ctx.fillRect(px + 35, py + 22 + bob, 5, 11);
-  ctx.fillStyle = look.skin; ctx.fillRect(px + 8, py + 31 + bob, 5, 4); ctx.fillRect(px + 35, py + 31 + bob, 5, 4);
-  // cabeza
-  ctx.fillStyle = look.skin; ctx.fillRect(px + 14, py + 6 + bob, 20, 15);
-  ctx.fillStyle = look.hair;
-  ctx.fillRect(px + 13, py + 3 + bob, 22, 7);
-  ctx.fillRect(px + 13, py + 7 + bob, 4, 7); ctx.fillRect(px + 31, py + 7 + bob, 4, 7);
+  // cuerpo pequeño y redondeado
+  c.fillStyle = look.suit;
+  rr(c, px + 12, py + 27 + bob, 24, 14, 6); c.fill(); c.stroke();
+  c.fillStyle = look.accent; rr(c, px + 21, py + 28 + bob, 6, 12, 3); c.fill();
+  // bracitos
+  c.fillStyle = look.suit;
+  rr(c, px + 7, py + 29 + bob, 6, 9, 3); c.fill(); c.stroke();
+  rr(c, px + 35, py + 29 + bob, 6, 9, 3); c.fill(); c.stroke();
+  // CABEZOTA
+  c.fillStyle = look.skin;
+  rr(c, px + 9, py + 3 + bob, 30, 26, 11); c.fill(); c.stroke();
+  // pelo: casquete + patillas (de espaldas cubre casi toda la cabeza)
+  c.fillStyle = look.hair;
   if (dir === 'up') {
-    ctx.fillRect(px + 14, py + 8 + bob, 20, 10); // nuca: sin cara
+    rr(c, px + 9, py + 3 + bob, 30, 21, 11); c.fill(); c.stroke();
   } else {
-    ctx.fillStyle = opts.eyes || '#1b2230';
-    if (dir === 'left' || dir === 'right') {
-      ctx.fillRect(px + 17, py + 12 + bob, 4, 4);
-      ctx.fillStyle = look.skin;
-    } else {
-      ctx.fillRect(px + 18, py + 12 + bob, 4, 4); ctx.fillRect(px + 27, py + 12 + bob, 4, 4);
-    }
+    c.beginPath();
+    c.moveTo(px + 9, py + 16 + bob);
+    c.quadraticCurveTo(px + 9, py + 3 + bob, px + 24, py + 3 + bob);
+    c.quadraticCurveTo(px + 39, py + 3 + bob, px + 39, py + 16 + bob);
+    c.lineTo(px + 35, py + 12 + bob);
+    c.quadraticCurveTo(px + 24, py + 8 + bob, px + 13, py + 12 + bob);
+    c.closePath(); c.fill(); c.stroke();
   }
-  ctx.restore();
+  if (dir !== 'up') {
+    // ojos grandes con brillo
+    const side = (dir === 'left' || dir === 'right') ? -3 : 0;
+    for (const ex of [18 + side, 30 + side]) {
+      c.fillStyle = 'white';
+      c.beginPath(); c.ellipse(px + ex, py + 18 + bob, 4, 5.2, 0, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke();
+      c.fillStyle = opts.eyes || INK;
+      c.beginPath(); c.arc(px + ex + side * .6, py + 19 + bob, 2.2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = 'white';
+      c.beginPath(); c.arc(px + ex - 1 + side * .6, py + 17.5 + bob, .9, 0, Math.PI * 2); c.fill();
+    }
+    // sonrisa
+    c.strokeStyle = INK; c.lineWidth = 1.8;
+    c.beginPath(); c.arc(px + 24 + side, py + 24 + bob, 3, .15 * Math.PI, .85 * Math.PI); c.stroke();
+  }
+  c.restore();
 }
 function drawPlayerSprite(camX, camY, time) {
   const coach = COACHES.find(c => c.id === state.coach) || COACHES[1];
-  drawActor(player.px - camX, player.py - camY, coach, facing, time / 90, player.moving);
+  drawActor(ctx, player.px - camX, player.py - camY, coach, facing, time / 90, player.moving);
 }
 function drawNPCs(camX, camY, time) {
   // Álex, el ojeador amigo.
   const ax = ALEX.x * TILE - camX, ay = ALEX.y * TILE - camY;
   if (ax > -TILE && ax < canvas.width && ay > -TILE && ay < canvas.height) {
-    drawActor(ax, ay, { skin: '#e9b184', hair: '#8a5a33', suit: '#3f7f4e', accent: '#f1e6c8' }, 'down', 0, false);
+    drawActor(ctx, ax, ay, { skin: '#e9b184', hair: '#8a5a33', suit: '#3f7f4e', accent: '#f1e6c8' }, 'down', 0, false);
     if (state.chapter === 0) { // burbuja de aviso
       const by = ay - 14 + Math.sin(time / 300) * 3;
       ctx.fillStyle = 'white'; ctx.fillRect(ax + 16, by, 16, 16);
@@ -471,7 +519,7 @@ function drawNPCs(camX, camY, time) {
   if (state.chapter >= 5) {
     const sx = SOMBRA.x * TILE - camX, sy = SOMBRA.y * TILE - camY;
     if (sx > -TILE && sx < canvas.width && sy > -TILE && sy < canvas.height)
-      drawActor(sx, sy, { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }, 'down', 0, false, { eyes: '#ff3355', aura: true });
+      drawActor(ctx, sx, sy, { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }, 'down', 0, false, { eyes: '#ff3355', aura: true });
   }
 }
 function drawChests(camX, camY, time) {
@@ -483,11 +531,23 @@ function drawChests(camX, camY, time) {
     const g = ctx.createRadialGradient(px + 24, py + 26, 4, px + 24, py + 26, 26);
     g.addColorStop(0, `rgba(255,212,92,${glow})`); g.addColorStop(1, 'rgba(255,212,92,0)');
     ctx.fillStyle = g; ctx.fillRect(px - 4, py - 4, 56, 56);
-    ctx.fillStyle = '#7a4a26'; ctx.fillRect(px + 8, py + 18, 32, 22);
-    ctx.fillStyle = '#8f5a30'; ctx.fillRect(px + 8, py + 14, 32, 9);
-    ctx.fillStyle = '#e8b13c'; ctx.fillRect(px + 8, py + 24, 32, 5);
-    ctx.fillRect(px + 20, py + 20, 8, 11);
-    ctx.strokeStyle = '#4a2c14'; ctx.lineWidth = 2; ctx.strokeRect(px + 8, py + 14, 32, 26);
+    ctx.fillStyle = 'rgba(15,50,20,.28)';
+    ctx.beginPath(); ctx.ellipse(px + 24, py + 41, 17, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.fillStyle = '#9a6132'; rr(ctx, px + 7, py + 17, 34, 23, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#b57840'; rr(ctx, px + 7, py + 13, 34, 11, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffce3c'; ctx.fillRect(px + 9, py + 25, 30, 5);
+    rr(ctx, px + 19, py + 21, 10, 12, 3); ctx.fill(); ctx.stroke();
+    // destello
+    const tw = Math.sin(time / 260 + i * 2);
+    if (tw > .55) {
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.moveTo(px + 36, py + 12); ctx.lineTo(px + 38.5, py + 17); ctx.lineTo(px + 43, py + 19);
+      ctx.lineTo(px + 38.5, py + 21); ctx.lineTo(px + 36, py + 26); ctx.lineTo(px + 33.5, py + 21);
+      ctx.lineTo(px + 29, py + 19); ctx.lineTo(px + 33.5, py + 17);
+      ctx.closePath(); ctx.fill();
+    }
   });
 }
 
@@ -562,7 +622,7 @@ function drawWorld(time) {
 }
 
 /* ---------------- Minimapa ---------------- */
-const MINI_COLORS = { T: '#1c4a28', W: '#2b76bd', B: '#a87a45', R: '#dbc389', F: '#4ea24e', H: '#f4efdd', M: '#ffd45c', P: '#c89858', L: '#8f83b8', '.': '#5da648', G: '#4f9440', s: '#d8ba6a', S: '#c9a34e', a: '#427c3c', A: '#376b34', d: '#544a78', D: '#463d6b' };
+const MINI_COLORS = { T: '#237a30', W: '#38a1f2', B: '#c08a4e', R: '#f2dc96', F: '#5abf49', H: '#fdf7e6', M: '#ffce3c', P: '#e0aa5f', L: '#9d8fd6', '.': '#6ecb49', G: '#57b13a', s: '#f7cf6c', S: '#dfb254', a: '#4a9e48', A: '#3b8a3d', d: '#5d5090', D: '#4c4180' };
 const miniBase = document.createElement('canvas');
 miniBase.width = miniBase.height = 96;
 {
@@ -626,7 +686,6 @@ function onArrive() {
   spawnDust();
   if (state.steps % 10 === 0) save();
   const t = tile(state.x, state.y);
-  if (t === 'H' && state.hp < 100) { state.hp = 100; save(); sfx('heal'); message('Centro médico: energía recuperada. 💚'); }
   checkChest();
   if (['G', 'A', 'S', 'D'].includes(t) && Math.random() < (t === 'G' ? .07 : .11)) startEncounter();
   else if (t === 'F' && Math.random() < .1) startEncounter(); // rivales de élite sobre el césped del estadio
@@ -657,14 +716,14 @@ function action() {
   const adjacentTo = t => [[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]].some(([dx, dy]) => tile(state.x + dx, state.y + dy) === t);
   if (adjacentTo('M')) return openShop();
   if (here === 'P') { const s = SIGNS[`${state.x},${state.y}`]; if (s) return dialog(`🪧 ${s}`); }
-  if (here === 'H' || adjacentTo('H')) return message('Centro médico: pasa por encima para curarte gratis.');
+  if (here === 'H' || adjacentTo('H')) return message('Centro médico: si pierdes un duelo, aquí te recuperas.');
   message('No hay nada con lo que interactuar aquí.');
 }
 function talkToAlex() {
   const lines = [
     'Álex: Te esperaba, míster. Lamine confía en tu proyecto. Busca un cofre al otro lado del camino y comienza a formar el equipo.',
     'Álex: los cofres brillan en el mapa. ¡Ábrelos para conseguir balones contrato!',
-    'Álex: debilita a un futbolista en la hierba alta y lánzale un balón contrato. ¡El % de éxito sube cuanto más cansado esté!',
+    'Álex: reta a un futbolista en la hierba alta a un 1 contra 1. ¡Gánale el partido y lánzale un balón contrato!',
     'Álex: el Estadio Central está al este, en el gran césped. Allí compiten los mejores.',
     'Álex: cada región tiene estrellas distintas. La clave es construir un equipo equilibrado.',
     'Álex: ten cuidado con el Entrenador Sombra… le he visto en el círculo central del estadio.',
@@ -677,8 +736,8 @@ function talkToAlex() {
   if (state.chapter === 0) advanceChapter(1);
 }
 function talkToSombra() {
-  if (state.chapter === 5) { dialog('Sombra: ¿Tú eres la esperanza de la Liga? Mi capitán te enseñará quién controla el mercado.'); setTimeout(() => { closeDialog(); startBossBattle(140); }, 1600); }
-  else if (state.chapter === 9) { dialog('Sombra: La final, míster. Todo o nada. Mi equipo oscuro no perdona.'); setTimeout(() => { closeDialog(); startBossBattle(190); }, 1600); }
+  if (state.chapter === 5) { dialog('Sombra: ¿Tú eres la esperanza de la Liga? Mi capitán te enseñará quién controla el mercado.'); setTimeout(() => { closeDialog(); startBossBattle(9); }, 1600); }
+  else if (state.chapter === 9) { dialog('Sombra: La final, míster. Todo o nada. Mi equipo oscuro no perdona.'); setTimeout(() => { closeDialog(); startBossBattle(17); }, 1600); }
   else if (state.chapter >= 10) dialog('Sombra: … Ganaste con honor. El mercado vuelve a ser libre. Quizá algún día quiera la revancha.');
   else dialog('Sombra: Aún no eres rival para mí. Vuelve cuando la historia te llame.');
 }
@@ -699,42 +758,60 @@ function buy(kind) {
   save(); sfx('chest'); openShop();
 }
 
-/* ---------------- Batalla ---------------- */
-function posMult(att, def) {
-  if (BEATS[att] === def) return 1.3;
-  if (BEATS[def] === att) return .75;
-  return 1;
+/* ---------------- Batalla: partido 1 contra 1 al mejor de 3 goles ----------------
+   El duelo se juega sobre un mini-campo animado (#pitch): eliges una jugada por
+   ronda, tu jugada también define cómo defiendes el contraataque rival, y el
+   primero en marcar 3 goles gana. Si ganas el partido, puedes fichar al rival. */
+const PLAY_NAMES = { dribble: 'Regate', shot: 'Disparo', press: 'Presión' };
+const GOALS_TO_WIN = 3;
+
+function posBonus(att, def) { // puntos porcentuales del triángulo táctico
+  if (BEATS[att] === def) return 10;
+  if (BEATS[def] === att) return -8;
+  return 0;
 }
-function moveMult(type, hero, rival) {
-  let m = 1;
-  if (rival.pos === 'POR') m = type === 'shot' ? .7 : type === 'dribble' ? 1.25 : 1;
-  else m = posMult(hero.pos, rival.pos);
-  if (hero.pos === 'POR') m *= .9; // los porteros no atacan bien
-  return m;
+// Probabilidad (0-1) de que tu jugada acabe en gol. Se muestra en vivo en cada botón.
+function goalChance(type) {
+  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
+  const r = battle.rival;
+  let c = { dribble: 40, shot: 55, press: 20 }[type];
+  if (r.pos === 'POR') c += type === 'shot' ? -15 : type === 'dribble' ? 10 : 0;
+  else c += posBonus(hero.pos, r.pos);
+  if (hero.pos === 'POR') c -= 6; // los porteros no definen bien
+  if (type === 'dribble' && state.coach === 'guardiola') c += 8;
+  if (type === 'shot' && state.coach === 'luis') c += 8;
+  c += Math.min(10, state.level - 5); // el nivel del míster suma poco a poco
+  if (battle.boss) c -= 8;
+  return clamp(c, 5, 90) / 100;
 }
+// Probabilidad de que el rival marque en su contraataque, según tu última jugada.
+function rivalChance(afterType) {
+  const r = battle.rival;
+  let c = 30 + Math.round((r.rating - 89) * 1.5) + (battle.boss ? battle.bossPower : 0);
+  if (afterType === 'shot') c += 12;                                   // el disparo te deja vendido
+  if (afterType === 'press') c -= state.coach === 'mourinho' ? 26 : 18; // la presión seca al rival
+  return clamp(c, 4, 85) / 100;
+}
+// Fichaje tras ganar el partido: cuanto mayor la goleada, más fácil convencerle.
 function captureChance() {
-  if (!battle || battle.boss) return 0;
-  let c = .15 + (1 - battle.rivalHp / battle.maxHp) * .65;
+  if (!battle || battle.boss || battle.finished !== 'win') return 0;
+  const margin = GOALS_TO_WIN - battle.rivalGoals; // 1 a 3
+  let c = .45 + .15 * margin;
   if (state.coach === 'ancelotti') c += .08;
-  if (state.owned.includes(battle.rival.id)) c += .15;
-  return clamp(c, .05, .95);
+  if (state.owned.includes(battle.rival.id)) c += .1;
+  return clamp(c, .1, .95);
 }
 function setBanner(txt, rival) {
   const b = $('#turn-banner');
   b.textContent = txt; b.classList.toggle('rival', !!rival); b.classList.remove('hidden');
 }
-function hpClass(el, ratio) {
-  el.classList.toggle('low', ratio < .5 && ratio >= .22);
-  el.classList.toggle('critical', ratio < .22);
-}
-function popDamage(target, text, kind = '') {
+function popDamage(side, text, kind = '') {
   const bf = $('#battlefield');
   const el = document.createElement('div');
-  el.className = `dmg-pop ${kind}`; el.textContent = text;
-  const spr = $(target === 'rival' ? '#rival-sprite' : '#hero-sprite');
-  const r = spr.getBoundingClientRect(), b = bf.getBoundingClientRect();
-  el.style.left = (r.left - b.left + r.width / 2) + 'px';
-  el.style.top = (r.top - b.top + 6) + 'px';
+  el.className = `dmg-pop ${kind}`;
+  el.textContent = text;
+  el.style.left = (side === 'foe' ? 72 : side === 'me' ? 28 : 50) + '%';
+  el.style.top = '38%';
   bf.appendChild(el);
   setTimeout(() => el.remove(), 950);
 }
@@ -744,15 +821,21 @@ function startEncounter() {
   const ids = ENCOUNTER_POOLS[zone()] || STARS.map(s => s.id);
   const available = STARS.filter(s => ids.includes(s.id) && s.id !== state.captain);
   const rival = available[Math.floor(Math.random() * available.length)];
-  const maxHp = 85 + randi(0, 30);
-  beginBattle({ rival, maxHp, boss: false });
+  beginBattle({ rival, boss: false, bossPower: 0 });
 }
-function startBossBattle(hp) {
+function startBossBattle(power) {
   sfx('boss');
-  beginBattle({ rival: SOMBRA_STAR, maxHp: hp, boss: true });
+  beginBattle({ rival: SOMBRA_STAR, boss: true, bossPower: power });
 }
-function beginBattle({ rival, maxHp, boss }) {
-  battle = { rival, maxHp, rivalHp: maxHp, shield: 0, busy: false, exhausted: false, rewarded: false, boss };
+function beginBattle({ rival, boss, bossPower }) {
+  battle = {
+    rival, boss, bossPower,
+    myGoals: 0, rivalGoals: 0,
+    busy: false, finished: null, rewarded: false,
+    drinkShield: false, lastPlay: null,
+    scene: { mode: 'idle', t0: 0, dur: 1, result: null },
+    confetti: [], shake: 0,
+  };
   held = null;
   $('#flash').classList.add('go');
   setTimeout(() => {
@@ -772,108 +855,154 @@ function setupBattle() {
   $('#hero-name').textContent = hero.name;
   $('#hero-level').textContent = state.level;
   $('#hero-pos').textContent = hero.pos; $('#hero-pos').className = `pos-badge ${hero.pos}`;
-  drawBattleSprite($('#rival-sprite'), r);
-  drawBattleSprite($('#hero-sprite'), hero);
-  // Pista de emparejamiento, para que la ventaja táctica se entienda.
+  $('#hero-face').style.cssText = portraitStyle(hero.id);
+  $('#rival-face').style.cssText = r.id === 'sombra' ? 'background:#191430' : portraitStyle(r.id);
+  // Pista táctica para que el emparejamiento se entienda de un vistazo.
   let hint;
-  if (battle.boss) hint = '⚠️ Jefe: no puede ser fichado. ¡Agótalo para ganar!';
-  else if (r.pos === 'POR') hint = `${hero.pos} vs POR — el portero resiste disparos: usa el regate (+25%).`;
+  if (battle.boss) hint = '⚠️ Jefe: no se puede fichar. ¡Gana el partido para expulsarlo!';
+  else if (r.pos === 'POR') hint = `${hero.pos} vs POR — el portero rival resiste disparos: prueba el regate.`;
   else {
-    const m = posMult(hero.pos, r.pos);
-    hint = m > 1 ? `${hero.pos} vs ${r.pos} — ¡ventaja táctica para ti! (+30% daño)`
-      : m < 1 ? `${hero.pos} vs ${r.pos} — desventaja táctica (−25% daño)`
+    const b = posBonus(hero.pos, r.pos);
+    hint = b > 0 ? `${hero.pos} vs ${r.pos} — ¡ventaja táctica! Tus jugadas suman +10% de gol.`
+      : b < 0 ? `${hero.pos} vs ${r.pos} — desventaja táctica: −8% de gol.`
       : `${hero.pos} vs ${r.pos} — duelo igualado.`;
   }
   $('#matchup').textContent = '🔺 ' + hint;
-  setBanner('TU TURNO');
+  setBanner('TU JUGADA');
+  battle.scene = { mode: 'idle', t0: performance.now(), dur: 1, result: null };
   updateBattle();
-  battleText(battle.boss ? `¡${r.name} salta al campo entre silbidos!` : `¡${r.name} aparece en el campo de entrenamiento!`);
+  sfx('whistle');
+  battleText(battle.boss
+    ? `¡${r.name} pisa el campito entre silbidos! Primero en marcar ${GOALS_TO_WIN} gana.`
+    : `¡Duelo contra ${r.name}! Primero en marcar ${GOALS_TO_WIN} goles gana el partido.`);
   if (!state.tutorialSeen) openTutorial();
 }
-function drawBattleSprite(can, p) {
-  const c = can.getContext('2d');
-  c.imageSmoothingEnabled = true;
-  c.clearRect(0, 0, 160, 160);
-  c.fillStyle = 'rgba(0,0,0,.22)';
-  c.beginPath(); c.ellipse(80, 146, 56, 10, 0, 0, Math.PI * 2); c.fill();
-  const img = PORTRAITS[p.id];
-  if (img?.complete && img.naturalWidth) { c.drawImage(img, 4, 0, 152, 152); return; }
-  if (p.id === 'sombra') { // silueta encapuchada
-    c.fillStyle = '#120d24';
-    c.beginPath(); c.moveTo(80, 8); c.quadraticCurveTo(20, 40, 30, 150); c.lineTo(130, 150); c.quadraticCurveTo(140, 40, 80, 8); c.fill();
-    c.fillStyle = '#ff3355'; c.fillRect(62, 62, 12, 7); c.fillRect(88, 62, 12, 7);
-    c.fillStyle = '#ff335522'; c.beginPath(); c.arc(80, 70, 52, 0, Math.PI * 2); c.fill();
-    return;
-  }
-  c.fillStyle = p.color; c.fillRect(34, 22, 92, 122);
-  c.fillStyle = 'white'; c.font = 'bold 34px monospace'; c.textAlign = 'center';
-  c.fillText(p.short, 80, 95);
-}
 function updateBattle() {
-  const rRatio = battle.rivalHp / battle.maxHp, hRatio = state.hp / 100;
-  $('#rival-hp').style.width = Math.max(0, rRatio * 100) + '%';
-  $('#hero-hp').style.width = Math.max(0, hRatio * 100) + '%';
-  hpClass($('#rival-hp'), rRatio); hpClass($('#hero-hp'), hRatio);
-  $('#rival-hp-text').textContent = `${Math.max(0, battle.rivalHp)}/${battle.maxHp}`;
-  $('#hero-hp-text').textContent = `${Math.max(0, state.hp)}/100`;
-  const lock = battle.busy;
-  $$('#battle-menu [data-move]').forEach(b => b.disabled = lock || battle.exhausted);
-  $('#drink-btn').disabled = lock || state.drinks < 1 || state.hp >= 100 || battle.exhausted;
-  $('#run-btn').disabled = lock;
-  const cBtn = $('#contract-btn');
-  cBtn.disabled = lock || state.balls < 1 || battle.boss;
+  $('#score-me').textContent = battle.myGoals;
+  $('#score-rival').textContent = battle.rivalGoals;
+  const paint = (sel, n) => $$(sel + ' i').forEach((el, i) => el.classList.toggle('scored', i < n));
+  paint('#hero-goals', battle.myGoals);
+  paint('#rival-goals', battle.rivalGoals);
+  const lock = battle.busy || !!battle.finished;
+  $$('#battle-menu [data-move]').forEach(b => b.disabled = lock);
+  if (!battle.finished) {
+    $('#odds-dribble').textContent = `${Math.round(goalChance('dribble') * 100)}% gol · defensa sólida`;
+    $('#odds-shot').textContent = `${Math.round(goalChance('shot') * 100)}% gol · te expone al contraataque`;
+    $('#odds-press').textContent = `${Math.round(goalChance('press') * 100)}% gol · rival casi bloqueado`;
+  }
+  $('#drink-btn').disabled = lock || state.drinks < 1 || battle.drinkShield;
+  $('#odds-drink').textContent = battle.drinkShield ? '¡portero gigante activado!' : `anula la próxima jugada rival · quedan ${state.drinks}`;
+  $('#run-btn').disabled = battle.busy;
+  $('#contract-btn').disabled = battle.busy || battle.boss || battle.finished !== 'win' || state.balls < 1;
   $('#contract-odds').textContent = battle.boss ? 'no disponible contra jefes'
+    : battle.finished !== 'win' ? 'gana el partido para fichar'
     : state.balls < 1 ? 'sin balones: tienda o cofres'
     : `${state.balls} balones · ${Math.round(captureChance() * 100)}% de éxito`;
 }
 function attack(type) {
-  if (!battle || battle.busy || battle.exhausted) return;
-  battle.busy = true; updateBattle();
-  sfx('select');
+  if (!battle || battle.busy || battle.finished) return;
+  battle.busy = true; battle.lastPlay = type;
+  updateBattle(); sfx('select');
   const hero = STARS.find(s => s.id === state.captain) || STARS[0];
-  const mv = MOVES[type];
-  const missChance = type === 'shot' ? (state.coach === 'luis' ? .05 : mv.miss) : 0;
-  if (Math.random() < missChance) {
-    battleText(`¡El disparo de ${hero.name} se marcha fuera!`);
-    popDamage('rival', '¡FUERA!', 'miss'); sfx('miss');
-    setTimeout(rivalTurn, 900);
-    return;
-  }
-  let dmg = randi(mv.min, mv.max);
-  dmg *= moveMult(type, hero, battle.rival);
-  if (type === 'dribble' && state.coach === 'guardiola') dmg *= 1.2;
-  dmg *= 1 + (state.level - 5) * .02; // el nivel del míster suma poco a poco
-  const crit = Math.random() < (state.coach === 'zidane' ? .24 : .12);
-  if (crit) dmg *= 1.5;
-  dmg = Math.max(1, Math.round(dmg));
-  if (type === 'press') battle.shield = state.coach === 'mourinho' ? 22 : mv.shield;
-  battle.rivalHp = Math.max(0, battle.rivalHp - dmg);
-  const eff = moveMult(type, hero, battle.rival);
-  battleText(`${hero.name} usa ${mv.name}.${crit ? ' ¡JUGADA PERFECTA!' : ''}${eff > 1.15 ? ' ¡Es muy eficaz!' : eff < .9 ? ' No es muy eficaz…' : ''}${type === 'press' ? ` Bloqueará ${battle.shield} del próximo golpe.` : ''}`);
-  popDamage('rival', `-${dmg}`, crit ? 'crit' : '');
-  sfx(crit ? 'crit' : 'hit');
-  $('#rival-sprite').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-12px)', filter: 'brightness(2.4)' }, { transform: 'translateX(9px)' }, { transform: 'translateX(0)' }], { duration: 330 });
-  updateBattle();
+  const willGoal = Math.random() < goalChance(type);
+  const golazo = willGoal && Math.random() < (state.coach === 'zidane' ? .18 : .07);
+  setBanner('TU JUGADA');
+  setScene('meRun');
+  battleText(`${hero.name} avanza con el balón…`);
   setTimeout(() => {
     if (!battle) return;
-    if (battle.rivalHp <= 0) exhaustRival();
-    else rivalTurn();
-  }, 900);
+    setScene('meShot', willGoal ? 'goal' : 'save');
+    setTimeout(() => {
+      if (!battle) return;
+      if (willGoal) {
+        battle.myGoals = Math.min(GOALS_TO_WIN, battle.myGoals + (golazo ? 2 : 1));
+        battle.shake = performance.now() + 320;
+        spawnConfetti('foe');
+        popDamage('foe', golazo ? '¡GOLAZO! ×2' : '¡GOL!', golazo ? 'crit' : 'goal');
+        sfx(golazo ? 'crit' : 'goal');
+        battleText(`${hero.name}: ${PLAY_NAMES[type]}… ¡GOOOL${golazo ? 'AZO, vale doble' : ''}! (${battle.myGoals}-${battle.rivalGoals})`);
+      } else {
+        popDamage('foe', type === 'shot' ? '¡FUERA!' : '¡PARADA!', 'miss');
+        sfx('miss');
+        battleText(type === 'press'
+          ? 'Presionas arriba: no llegas a rematar, pero el rival contraatacará frenado.'
+          : `${hero.name}: ${PLAY_NAMES[type]}… ¡el rival la saca!`);
+      }
+      updateBattle();
+      setTimeout(() => {
+        if (!battle) return;
+        if (battle.myGoals >= GOALS_TO_WIN) return winMatch();
+        rivalPlay(type);
+      }, 950);
+    }, 430);
+  }, 700);
 }
-function exhaustRival() {
-  battle.exhausted = true; battle.busy = false;
+function rivalPlay(afterType) {
+  setBanner('JUGADA RIVAL', true);
+  const r = battle.rival;
+  const mv = r.moves[Math.floor(Math.random() * r.moves.length)];
+  const shielded = battle.drinkShield;
+  const willGoal = !shielded && Math.random() < rivalChance(afterType);
+  setScene('foeRun');
+  battleText(`${r.name} responde al contraataque…`);
+  setTimeout(() => {
+    if (!battle) return;
+    setScene('foeShot', willGoal ? 'goal' : 'save');
+    setTimeout(() => {
+      if (!battle) return;
+      if (shielded) {
+        battle.drinkShield = false;
+        popDamage('me', '¡PARADÓN!', 'heal'); sfx('heal');
+        battleText(`${r.name} usa ${mv}… ¡pero tras el tiempo muerto tu portero lo detiene todo!`);
+      } else if (willGoal) {
+        battle.rivalGoals++;
+        battle.shake = performance.now() + 320;
+        popDamage('me', 'GOL RIVAL', 'bad'); sfx('concede');
+        battleText(`${r.name} usa ${mv}… y marca. (${battle.myGoals}-${battle.rivalGoals})`);
+      } else {
+        popDamage('me', '¡SALVADA!', 'miss'); sfx('miss');
+        battleText(`${r.name} usa ${mv}, ¡pero la sacas bajo palos!`);
+      }
+      updateBattle();
+      setTimeout(() => {
+        if (!battle) return;
+        if (battle.rivalGoals >= GOALS_TO_WIN) return loseMatch();
+        battle.busy = false;
+        setBanner('TU JUGADA');
+        updateBattle();
+      }, 950);
+    }, 430);
+  }, 700);
+}
+function winMatch() {
+  battle.finished = 'win'; battle.busy = false;
+  battle.scene = { mode: 'idle', t0: performance.now(), dur: 1, result: null };
+  spawnConfetti('foe'); spawnConfetti('me');
+  sfx('whistle');
+  let prize = 0;
   if (!battle.rewarded) {
     battle.rewarded = true;
     if (battle.boss) return bossVictory();
-    state.wins++;
-    state.coins += 20;
+    const margin = GOALS_TO_WIN - battle.rivalGoals;
+    prize = 10 + margin * 10;
+    state.wins++; state.coins += prize;
     if (zone() === 'Estadio Central') state.stadiumWins++;
     if (state.wins % 3 === 0) state.level = Math.min(30, state.level + 1);
     save(); checkProgress();
   }
-  setBanner('¡RIVAL AGOTADO!');
-  battleText(`${battle.rival.name} está agotado (+20 🪙). ¡Es el mejor momento para fichar!`);
+  setBanner('¡VICTORIA!');
+  battleText(`¡Pitido final! Ganas ${battle.myGoals}-${battle.rivalGoals} (+${prize} 🪙). ¡Lanza el balón contrato para fichar a ${battle.rival.name}!`);
   updateBattle();
+}
+function loseMatch() {
+  battle.finished = 'loss'; battle.busy = false;
+  setBanner('DERROTA', true);
+  sfx('fail');
+  state.coins = Math.max(0, state.coins - 15);
+  save();
+  battleText(`Pitido final: pierdes ${battle.myGoals}-${battle.rivalGoals}. Te retiras al centro médico (−15 🪙).`);
+  updateBattle();
+  setTimeout(() => { if (battle) endBattle('defeat'); }, 2000);
 }
 function bossVictory() {
   state.bossWins++;
@@ -881,82 +1010,53 @@ function bossVictory() {
   state.level = Math.min(30, state.level + 2);
   save(); sfx('sign');
   setBanner('¡VICTORIA!');
-  battleText('¡Has vencido al equipo de Sombra! +200 🪙 y +5 balones contrato.');
+  battleText(`¡Ganas la final ${battle.myGoals}-${battle.rivalGoals}! Sombra se retira. +200 🪙 y +5 balones contrato.`);
   updateBattle();
-  setTimeout(() => { endBattle('bosswin'); checkProgress(); }, 2000);
+  setTimeout(() => { if (!battle) return; endBattle('bosswin'); checkProgress(); }, 2200);
 }
-function rivalTurn() {
-  if (!battle || battle.exhausted) return;
-  setBanner('TURNO RIVAL', true);
-  const r = battle.rival;
-  const mv = r.moves[Math.floor(Math.random() * r.moves.length)];
-  setTimeout(() => {
-    if (!battle) return;
-    let dmg = randi(8, 18) + Math.max(0, Math.round((r.rating - 86) / 2)) + (battle.boss ? 7 : 0);
-    const blocked = Math.min(dmg - 2, battle.shield);
-    dmg = Math.max(2, dmg - battle.shield);
-    battle.shield = 0;
-    state.hp = Math.max(0, state.hp - dmg);
-    save();
-    battleText(`${r.name} usa ${mv}. ¡Pierdes ${dmg} de energía!${blocked > 0 ? ` (bloqueaste ${blocked})` : ''}`);
-    popDamage('hero', `-${dmg}`);
-    sfx('hit');
-    $('#hero-sprite').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(12px)', filter: 'brightness(2.4)' }, { transform: 'translateX(-9px)' }, { transform: 'translateX(0)' }], { duration: 330 });
-    updateBattle();
-    if (state.hp <= 0) setTimeout(() => endBattle('defeat'), 1200);
-    else { battle.busy = false; setBanner('TU TURNO'); updateBattle(); }
-  }, 700);
-}
+// Tiempo muerto: la bebida garantiza que la próxima jugada rival acabe en parada.
 function useDrink() {
-  if (!battle || battle.busy || state.drinks < 1 || state.hp >= 100 || battle.exhausted) return;
-  battle.busy = true; updateBattle();
+  if (!battle || battle.busy || battle.finished || state.drinks < 1 || battle.drinkShield) return;
   state.drinks--;
-  const heal = Math.min(35, 100 - state.hp);
-  state.hp += heal;
+  battle.drinkShield = true;
   save(); sfx('heal');
-  battleText(`Bebida isotónica: recuperas ${heal} de energía.`);
-  popDamage('hero', `+${heal}`, 'heal');
+  popDamage('me', '🥤', 'heal');
+  battleText('Tiempo muerto: bebida isotónica. ¡Tu portero parará seguro la próxima jugada rival!');
   updateBattle();
-  setTimeout(rivalTurn, 900);
 }
 function contract() {
-  if (!battle || battle.busy || battle.boss) return;
+  if (!battle || battle.busy || battle.boss || battle.finished !== 'win') return;
   if (state.balls < 1) { battleText('No te quedan balones contrato. Busca cofres o visita la tienda.'); return; }
   battle.busy = true;
   state.balls--; save(); updateBattle();
-  battleText('¡Lanzas un balón contrato!');
+  battleText(`Lanzas un balón contrato a ${battle.rival.name}…`);
+  popDamage('foe', '⚽');
   const chance = captureChance();
-  $('#rival-sprite').animate([{ transform: 'scale(1)' }, { transform: 'scale(.1) rotate(360deg)' }, { transform: 'scale(.1)' }, { transform: 'scale(1)' }], { duration: 1000 });
   setTimeout(() => {
     if (!battle) return;
     if (Math.random() < chance) {
       const isNew = !state.owned.includes(battle.rival.id);
-      if (isNew) state.owned.push(battle.rival.id);
-      if (!battle.rewarded) {
-        battle.rewarded = true;
-        state.wins++; state.coins += 30;
-        if (zone() === 'Estadio Central') state.stadiumWins++;
-        if (state.wins % 3 === 0) state.level = Math.min(30, state.level + 1);
-      } else state.coins += 10;
+      if (isNew) state.owned.push(battle.rival.id); else state.coins += 15;
       save(); sfx('sign');
-      battleText(isNew ? `¡Fichaje conseguido! ${battle.rival.name} se une a tu equipo. 🎉` : `${battle.rival.name} renueva contigo. +🪙`);
+      spawnConfetti('foe');
+      battleText(isNew ? `¡Fichaje conseguido! ${battle.rival.name} se une a tu equipo. 🎉` : `${battle.rival.name} renueva contigo (+15 🪙).`);
       checkProgress();
-      setTimeout(() => endBattle('signed'), 1700);
+      setTimeout(() => { if (battle) endBattle('signed'); }, 1700);
     } else {
       sfx('fail');
-      battleText(`¡${battle.rival.name} rechaza el contrato!`);
-      if (battle.exhausted) { battle.busy = false; updateBattle(); }
-      else setTimeout(rivalTurn, 900);
+      battleText(`${battle.rival.name} lo rechaza: quiere verte ganar con más autoridad. Puedes intentarlo otra vez.`);
+      battle.busy = false;
+      updateBattle();
     }
   }, 1200);
 }
 function endBattle(result) {
   battle = null;
   if (result === 'defeat') {
-    state.x = 6; state.y = 7; state.hp = 100;
+    state.x = 6; state.y = 7;
     syncPlayer(); save();
     showView('world-view');
-    message('Tu capitán se agotó. Has despertado en el centro médico.');
+    message('Has perdido el duelo. Te recuperas en el centro médico.');
   } else {
     showView('world-view');
     if (result === 'signed') message('¡Nuevo fichaje en tu vestuario! Míralo en 👥 Equipo.');
@@ -966,11 +1066,146 @@ function endBattle(result) {
   maybeShowStory();
 }
 
+/* ---- Renderizado del mini-campo (#pitch) ---- */
+const pitchCanvas = $('#pitch');
+const pctx = pitchCanvas.getContext('2d');
+const PITCH = { x: 60, y: 116, w: 840, h: 268 }; // campo dentro del canvas 960×420
+const easeIO = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+const fieldXY = (fx, fy) => [PITCH.x + fx * PITCH.w, PITCH.y + fy * PITCH.h];
+
+function setScene(mode, result = null) {
+  if (!battle) return;
+  const dur = mode.endsWith('Run') ? 680 : mode.endsWith('Shot') ? 420 : 1;
+  battle.scene = { mode, result, t0: performance.now(), dur };
+}
+// Posiciones de los dos jugadores y el balón según la fase de la escena.
+function scenePositions(time) {
+  const me = { x: .2, y: .55, dir: 'right', walking: false };
+  const foe = { x: .8, y: .55, dir: 'left', walking: false };
+  const ball = { x: .5, y: .62, air: 0 };
+  const s = battle.scene;
+  const k = Math.min(1, (time - s.t0) / (s.dur || 1));
+  if (s.mode === 'meRun') {
+    me.x = .2 + easeIO(k) * .32; me.walking = k < 1;
+    ball.x = me.x + .05; ball.air = Math.abs(Math.sin(time / 90)) * 5;
+  } else if (s.mode === 'foeRun') {
+    foe.x = .8 - easeIO(k) * .32; foe.walking = k < 1;
+    ball.x = foe.x - .05; ball.air = Math.abs(Math.sin(time / 90)) * 5;
+  } else if (s.mode === 'meShot') {
+    me.x = .52;
+    if (s.result === 'goal') { ball.x = .58 + k * .41; ball.air = Math.sin(k * Math.PI) * 34; }
+    else { ball.x = .58 + k * .3; ball.air = Math.sin(k * Math.PI) * 46; foe.x = .8 + easeIO(k) * .09; foe.walking = k < 1; }
+  } else if (s.mode === 'foeShot') {
+    foe.x = .48;
+    if (s.result === 'goal') { ball.x = .42 - k * .41; ball.air = Math.sin(k * Math.PI) * 34; }
+    else { ball.x = .42 - k * .3; ball.air = Math.sin(k * Math.PI) * 46; me.x = .2 - easeIO(k) * .07; me.walking = k < 1; }
+  }
+  return { me, foe, ball };
+}
+function spawnConfetti(side) {
+  const [gx, gy] = fieldXY(side === 'foe' ? .97 : .03, .5);
+  const colors = ['#ffce00', '#45d9ff', '#ff5b7d', '#7dff6e', '#ffffff'];
+  for (let i = 0; i < 26; i++) battle.confetti.push({
+    x: gx, y: gy - 20,
+    vx: (Math.random() - (side === 'foe' ? .72 : .28)) * .3,
+    vy: -.18 - Math.random() * .22,
+    life: 900 + Math.random() * 300,
+    color: colors[i % colors.length],
+    size: 3 + Math.random() * 4,
+  });
+}
+function drawGoalFrame(x, cy) {
+  pctx.fillStyle = '#ffffff';
+  rr(pctx, x - 12, cy - 58, 24, 116, 8); pctx.fill();
+  pctx.lineWidth = 4; pctx.strokeStyle = INK; rr(pctx, x - 12, cy - 58, 24, 116, 8); pctx.stroke();
+  pctx.strokeStyle = '#00000030'; pctx.lineWidth = 1.5;
+  for (let i = -7; i <= 7; i += 5) { pctx.beginPath(); pctx.moveTo(x + i, cy - 54); pctx.lineTo(x + i, cy + 54); pctx.stroke(); }
+  for (let j = -52; j <= 52; j += 12) { pctx.beginPath(); pctx.moveTo(x - 9, cy + j); pctx.lineTo(x + 9, cy + j); pctx.stroke(); }
+}
+function drawPitchActor(x, y, look, dir, time, walking, opts = {}) {
+  const s = 1.75;
+  pctx.save();
+  pctx.translate(x - 24 * s, y - 46 * s);
+  pctx.scale(s, s);
+  drawActor(pctx, 0, 0, look, dir, time / 85, walking, opts);
+  pctx.restore();
+}
+function drawBall(ball, time) {
+  const [bx, by] = fieldXY(ball.x, ball.y);
+  const air = ball.air || 0;
+  pctx.fillStyle = 'rgba(0,0,0,.25)';
+  pctx.beginPath(); pctx.ellipse(bx, by + 9, 10, 4, 0, 0, Math.PI * 2); pctx.fill();
+  pctx.fillStyle = 'white';
+  pctx.beginPath(); pctx.arc(bx, by - air, 9, 0, Math.PI * 2); pctx.fill();
+  pctx.lineWidth = 2.5; pctx.strokeStyle = INK; pctx.stroke();
+  pctx.fillStyle = INK;
+  pctx.beginPath(); pctx.arc(bx + Math.sin(time / 140) * 3.5, by - air - Math.cos(time / 140) * 3.5, 3, 0, Math.PI * 2); pctx.fill();
+}
+function drawPitch(time) {
+  const W = pitchCanvas.width, H = pitchCanvas.height;
+  pctx.clearRect(0, 0, W, H);
+  pctx.save();
+  if (battle.shake > time) pctx.translate((Math.random() - .5) * 7, (Math.random() - .5) * 7);
+  // gradas con público saltarín
+  pctx.fillStyle = '#1a2a4a'; rr(pctx, 12, 6, W - 24, 74, 16); pctx.fill();
+  pctx.lineWidth = 4; pctx.strokeStyle = INK; rr(pctx, 12, 6, W - 24, 74, 16); pctx.stroke();
+  const crowdColors = ['#ff6b6b', '#ffd24d', '#3d9df6', '#7dff6e', '#ff9dd6', '#fff4dd'];
+  for (let row = 0; row < 2; row++) for (let i = 0; i < 44; i++) {
+    const cxp = 32 + i * (W - 64) / 43;
+    const cyp = 32 + row * 26 + (Math.sin(time / 260 + i * 1.7 + row) > .72 ? -6 : 0);
+    pctx.fillStyle = crowdColors[(i + row * 3) % crowdColors.length];
+    pctx.beginPath(); pctx.arc(cxp, cyp, 7, 0, Math.PI * 2); pctx.fill();
+  }
+  // campo con césped a franjas
+  rr(pctx, PITCH.x - 16, PITCH.y - 14, PITCH.w + 32, PITCH.h + 30, 20);
+  pctx.fillStyle = '#4fa843'; pctx.fill();
+  pctx.save();
+  rr(pctx, PITCH.x - 16, PITCH.y - 14, PITCH.w + 32, PITCH.h + 30, 20); pctx.clip();
+  for (let i = 0; i < 10; i++) {
+    pctx.fillStyle = i % 2 ? '#5fc74e' : '#55ba45';
+    pctx.fillRect(PITCH.x - 16 + i * (PITCH.w + 32) / 10, PITCH.y - 14, (PITCH.w + 32) / 10 + 1, PITCH.h + 30);
+  }
+  pctx.strokeStyle = '#ffffffd9'; pctx.lineWidth = 4;
+  pctx.strokeRect(PITCH.x, PITCH.y, PITCH.w, PITCH.h);
+  pctx.beginPath(); pctx.moveTo(PITCH.x + PITCH.w / 2, PITCH.y); pctx.lineTo(PITCH.x + PITCH.w / 2, PITCH.y + PITCH.h); pctx.stroke();
+  pctx.beginPath(); pctx.arc(PITCH.x + PITCH.w / 2, PITCH.y + PITCH.h / 2, 50, 0, Math.PI * 2); pctx.stroke();
+  pctx.strokeRect(PITCH.x, PITCH.y + PITCH.h / 2 - 68, 66, 136);
+  pctx.strokeRect(PITCH.x + PITCH.w - 66, PITCH.y + PITCH.h / 2 - 68, 66, 136);
+  pctx.restore();
+  pctx.lineWidth = 5; pctx.strokeStyle = INK;
+  rr(pctx, PITCH.x - 16, PITCH.y - 14, PITCH.w + 32, PITCH.h + 30, 20); pctx.stroke();
+  // porterías
+  drawGoalFrame(PITCH.x - 26, PITCH.y + PITCH.h / 2);
+  drawGoalFrame(PITCH.x + PITCH.w + 26, PITCH.y + PITCH.h / 2);
+  // jugadores y balón
+  const { me, foe, ball } = scenePositions(time);
+  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
+  const meLook = { skin: '#f2b98a', hair: '#3a2b20', suit: hero.color, accent: '#ffffff' };
+  const foeLook = battle.rival.id === 'sombra'
+    ? { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }
+    : { skin: '#e8ab7c', hair: '#241a12', suit: battle.rival.color, accent: '#ffffff' };
+  const [mx, my] = fieldXY(me.x, me.y);
+  const [fx, fy] = fieldXY(foe.x, foe.y);
+  drawPitchActor(mx, my, meLook, me.dir, time, me.walking);
+  drawPitchActor(fx, fy, foeLook, foe.dir, time, foe.walking, battle.rival.id === 'sombra' ? { eyes: '#ff3355', aura: true } : {});
+  drawBall(ball, time);
+  // confeti
+  battle.confetti = battle.confetti.filter(p => (p.life -= 16) > 0);
+  for (const p of battle.confetti) {
+    p.vy += .0011 * 16; p.x += p.vx * 16; p.y += p.vy * 16;
+    pctx.globalAlpha = Math.min(1, p.life / 400);
+    pctx.fillStyle = p.color;
+    pctx.fillRect(p.x, p.y, p.size, p.size);
+  }
+  pctx.globalAlpha = 1;
+  pctx.restore();
+}
+
 /* Tutorial de combate (solo la primera vez). */
 const TUTORIAL = [
-  { t: '⚔️ ¡Tu primer duelo!', x: 'Es un combate por turnos: eliges una jugada y el rival responde. Cada jugada muestra su daño en el propio botón.' },
-  { t: '🔺 Ventaja de posición', x: 'DEL supera a MED, MED a DEF y DEF a DEL (+30% de daño). El portero resiste disparos: contra él, regate. La pista amarilla te lo recuerda en cada duelo.' },
-  { t: '⚽ El fichaje', x: 'Cuanta menos energía tenga el rival, mayor el % del botón Fichar. Si lo agotas del todo, la victoria es tuya y el fichaje casi seguro. ¡Suerte, míster!' },
+  { t: '⚽ ¡Partido 1 contra 1!', x: 'Un mini partido en el campito: el primero en marcar 3 goles gana. En cada ronda eliges una jugada, y cada botón muestra tu % de gol en vivo.' },
+  { t: '🔺 Ataque y defensa', x: 'Tu jugada también define tu defensa: el Disparo es potente pero te expone al contraataque; la Presión apenas marca pero seca al rival. Y el triángulo DEL > MED > DEF > DEL cambia tus porcentajes (el portero rival resiste disparos).' },
+  { t: '✍️ Si ganas, lo fichas', x: 'Gana el partido y lanza el balón contrato tras el pitido final. Cuanto mayor sea la goleada, más fácil será convencerle. ¡Suerte, míster!' },
 ];
 let tutStep = 0;
 function openTutorial() {
@@ -1045,7 +1280,7 @@ function renderTeam() {
       <button data-id="${p.id}" class="${state.captain === p.id ? 'is-captain' : ''}">${state.captain === p.id ? '✓' : 'Elegir'}</button>
     </article>`).join('') + `</div>`;
   $$('.player-row button').forEach(b => b.onclick = () => {
-    state.captain = b.dataset.id; state.hp = 100;
+    state.captain = b.dataset.id;
     save(); sfx('select'); renderTeam();
   });
 }
@@ -1160,6 +1395,8 @@ function loop(t) {
     updateMovement(dt);
     drawWorld(t);
     drawMinimap(t);
+  } else if (battle && $('#battle-view').classList.contains('active')) {
+    drawPitch(t);
   }
   requestAnimationFrame(loop);
 }

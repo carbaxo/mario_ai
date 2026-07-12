@@ -2,7 +2,7 @@
 /* Service worker de FutMon World: precachea la app para jugar sin conexión.
    IMPORTANTE: al cambiar cualquier fichero del juego, sube la versión de CACHE
    para que los jugadores reciban la actualización. */
-const CACHE = 'futmon-world-v2';
+const CACHE = 'futmon-world-v3';
 const CORE = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
