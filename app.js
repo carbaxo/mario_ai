@@ -758,11 +758,11 @@ function buy(kind) {
   save(); sfx('chest'); openShop();
 }
 
-/* ---------------- Batalla: partido 1c1 en tiempo real (estilo FIFA) ----------------
-   Manejas a tu capitán con la cruceta/WASD sobre el mini-campo (#pitch):
-   PASE (toque al hueco), CHUTE (a portería) y SEGADA (robar el balón).
-   Porteros automáticos en cada portería. Primero en marcar 3 goles gana;
-   si ganas el partido, puedes fichar al rival. */
+/* ---------------- Batalla: partido 3 contra 3 en tiempo real, sin porteros ----------------
+   Controlas al jugador marcado con la flecha (cambia solo al más cercano al
+   balón). PASE al compañero mejor situado, CHUTE a portería (los rivales
+   bloquean tiros con el cuerpo: busca el hueco) y SEGADA para robar.
+   Primero en marcar 3 goles gana; si ganas, fichas al capitán rival. */
 const GOALS_TO_WIN = 3;
 
 /* ---- Geometría del mini-campo (#pitch, canvas 960×420) ---- */
@@ -770,16 +770,17 @@ const pitchCanvas = $('#pitch');
 const pctx = pitchCanvas.getContext('2d');
 const PITCH = { x: 60, y: 116, w: 840, h: 268 };
 const PCY = PITCH.y + PITCH.h / 2;   // centro vertical del campo
-const MOUTH = 52;                    // media altura de la boca de portería
+const MOUTH = 46;                    // media altura de la boca de portería
 const fieldXY = (fx, fy) => [PITCH.x + fx * PITCH.w, PITCH.y + fy * PITCH.h];
+const LANES = [0, -84, 84];          // carriles de la formación
 
-/* ---- Entrada del partido (cruceta táctil + teclado) ---- */
+/* ---- Entrada del partido (joystick flotante + teclado) ---- */
 const battleKeys = { up: false, down: false, left: false, right: false };
-const joy = { active: false, id: null, bx: 0, by: 0, x: 0, y: 0 };
+const joy = { active: false, x: 0, y: 0 }; // lo alimenta el joystick táctil
 function battleMove() {
   const jm = Math.hypot(joy.x, joy.y);
   if (joy.active && jm > .16) {
-    const k = Math.min(1, jm); // analógico: empuja poco = anda, empuja a tope = corre
+    const k = Math.min(1, jm); // analógico: empuja poco = anda, a tope = corre
     return { x: joy.x / jm * k, y: joy.y / jm * k };
   }
   let x = (battleKeys.right ? 1 : 0) - (battleKeys.left ? 1 : 0);
@@ -834,6 +835,7 @@ function beginBattle({ rival, boss, bossExtra = 0 }) {
     myGoals: 0, rivalGoals: 0,
     mode: 'pause', finished: null, rewarded: false, busy: false,
     stats: null, sim: null, boost: 0,
+    mineStars: null, foesStars: null,
     confetti: [], shake: 0,
   };
   held = null;
@@ -848,24 +850,70 @@ function beginBattle({ rival, boss, bossExtra = 0 }) {
 function makeStats(hero, r, boss, extra) {
   const hr = (hero.rating - 84) / 10;
   return {
-    mySpeed: .15 + hr * .02 + (hero.pos === 'MED' ? .014 : 0),
-    passSpeed: .42 + (state.coach === 'guardiola' ? .1 : 0) + (hero.pos === 'MED' ? .04 : 0),
-    shotSpeed: .55 + hr * .05 + (hero.pos === 'DEL' ? .06 : 0) + (state.coach === 'luis' ? .06 : 0),
-    shotSpread: Math.max(10, 34 - hr * 10 - (hero.pos === 'DEL' ? 8 : 0) - (state.coach === 'zidane' ? 9 : 0)),
+    passSpeed: .44 + (state.coach === 'guardiola' ? .1 : 0) + (hero.pos === 'MED' ? .04 : 0),
+    shotSpeed: .56 + hr * .05 + (hero.pos === 'DEL' ? .06 : 0) + (state.coach === 'luis' ? .06 : 0),
+    shotSpread: Math.max(12, 40 - hr * 10 - (hero.pos === 'DEL' ? 9 : 0) - (state.coach === 'zidane' ? 9 : 0)),
     tackleRange: 34 + (hero.pos === 'DEF' ? 10 : 0) + (state.coach === 'mourinho' ? 9 : 0),
-    myKeeperR: 25 + (hero.pos === 'POR' ? 12 : 0),
-    foeSpeed: clamp(.105 + (r.rating - 84) * .004 + (boss ? .028 : 0) + extra * .001, .1, .175),
-    foeTackleProb: .45 + (boss ? .18 : 0),
-    foeShootRange: 230 + (boss ? 40 : 0),
-    foeSpread: Math.max(12, 40 - (r.rating - 88) * 3 - (boss ? 10 : 0) - extra),
-    foeShotSpeed: .55 + (r.rating - 88) * .01 + (boss ? .08 : 0),
-    foeKeeperR: 24 + (boss ? 8 : 0) + Math.round(extra / 3),
+    mineTackleProb: .38 + (hero.pos === 'POR' ? .2 : 0),
+    foePace: 1 + (r.rating - 88) * .012 + (boss ? .1 : 0) + extra * .004,
+    foeTackleProb: .42 + (boss ? .15 : 0),
+    foeShootRange: 250 + (boss ? 40 : 0),
+    foeSpread: Math.max(16, 46 - (r.rating - 88) * 3 - (boss ? 10 : 0) - extra),
+    foeShotSpeed: .56 + (r.rating - 88) * .01 + (boss ? .07 : 0),
+    foePassProb: .5 + (boss ? .2 : 0),
   };
+}
+/* Plantillas: tu capitán + tus 2 mejores fichajes; el rival, con 2 estrellas más. */
+function buildTeams(hero, rival, boss) {
+  const bench = state.owned
+    .filter(id => id !== hero.id)
+    .map(id => STARS.find(s => s.id === id))
+    .filter(Boolean)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 2);
+  while (bench.length < 2) bench.push({ id: 'cantera' + bench.length, name: 'Canterano', short: 'CA', pos: 'MED', rating: 80, color: hero.color });
+  const mineStars = [hero, ...bench];
+  let foesStars;
+  if (boss) {
+    foesStars = [rival,
+      { ...SOMBRA_STAR, id: 'sombra2', name: 'Esbirro de Sombra', rating: 90 },
+      { ...SOMBRA_STAR, id: 'sombra3', name: 'Esbirro de Sombra', rating: 90 }];
+  } else {
+    const used = new Set([rival.id, ...mineStars.map(s => s.id)]);
+    const others = STARS.filter(s => !used.has(s.id));
+    foesStars = [rival];
+    while (foesStars.length < 3 && others.length)
+      foesStars.push(others.splice(Math.floor(Math.random() * others.length), 1)[0]);
+    while (foesStars.length < 3)
+      foesStars.push({ id: 'riv' + foesStars.length, name: 'Rival', short: 'RV', pos: 'MED', rating: 84, color: rival.color });
+  }
+  return { mineStars, foesStars };
+}
+function mkPlayer(star, team, i, pace = 1) {
+  return {
+    star, team, lane: LANES[i], i,
+    x: 0, y: 0, dx: team === 'mine' ? 1 : -1, dy: 0, moving: false,
+    slide: 0, sdx: 1, sdy: 0, recover: 0, stun: 0,
+    tackleCd: 0, shootCd: 0, passCd: 0, veer: 0, veerT: 0,
+    spd: (.116 + (star.rating - 84) * .0035 + (star.pos === 'MED' ? .01 : 0)) * pace,
+  };
+}
+// Colisión de camisetas: si los dos equipos visten parecido, el rival cambia de kit.
+function hexRGB(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function kitClash(a, b) {
+  const [r1, g1, b1] = hexRGB(a), [r2, g2, b2] = hexRGB(b);
+  return Math.hypot(r1 - r2, g1 - g2, b1 - b2) < 115;
 }
 function setupBattle() {
   const hero = STARS.find(s => s.id === state.captain) || STARS[0];
   const r = battle.rival;
   battle.stats = makeStats(hero, r, battle.boss, battle.bossExtra);
+  battle.foeKit = kitClash(hero.color, r.color)
+    ? (kitClash('#ff5b5b', hero.color) ? '#f4f1e8' : '#ff5b5b')
+    : r.color;
+  const teams = buildTeams(hero, r, battle.boss);
+  battle.mineStars = teams.mineStars;
+  battle.foesStars = teams.foesStars;
   const zoneClass = { 'Ciudad Solar': 'zone-solar', 'Bosque Cantera': 'zone-bosque', 'Distrito Nocturno': 'zone-noche', 'Estadio Central': 'zone-estadio' }[zone()] || '';
   $('#battlefield').className = `battlefield ${zoneClass}`;
   $('#rival-name').textContent = r.name;
@@ -877,7 +925,7 @@ function setupBattle() {
   $('#hero-face').style.cssText = portraitStyle(hero.id);
   $('#rival-face').style.cssText = r.id === 'sombra' ? 'background:#191430' : portraitStyle(r.id);
   // Pista de ventajas: qué aporta tu capitán y tu entrenador en el campo.
-  const perk = { DEL: 'chute más potente y preciso', MED: 'más velocidad y mejor pase', DEF: 'segada más larga', POR: 'tu portero es gigante' }[hero.pos];
+  const perk = { DEL: 'chute más potente y preciso', MED: 'más velocidad y mejor pase', DEF: 'segada más larga', POR: 'tu equipo roba más fácil' }[hero.pos];
   const coach = COACHES.find(v => v.id === state.coach);
   const mUp = $('#matchup');
   mUp.textContent = `⭐ ${hero.pos}: ${perk}${coach ? ` · 🎓 ${coach.name}: ${coach.skill.toLowerCase()}` : ''}${battle.boss ? ' · ⚠️ Jefe: no se puede fichar' : ''}`;
@@ -888,17 +936,21 @@ function setupBattle() {
   updateBattle();
   sfx('whistle');
   battleText(battle.boss
-    ? `¡Final contra ${r.name}! Primero en marcar ${GOALS_TO_WIN} goles gana. ¡Muévete y roba el balón!`
-    : `¡Duelo contra ${r.name}! Primero en marcar ${GOALS_TO_WIN} goles gana el partido.`);
+    ? `¡Final 3c3 contra el equipo de Sombra! Primero en marcar ${GOALS_TO_WIN} gana.`
+    : `¡3 contra 3 ante el equipo de ${r.name}! Primero en marcar ${GOALS_TO_WIN} gana.`);
   if (!state.tutorialSeen) openTutorial();
   else setTimeout(() => { if (battle && !battle.finished && battle.mode === 'pause') startPlay(null); }, 900);
 }
 function resetPositions(ballTo) {
+  const S = battle.stats;
+  const mine = battle.mineStars.map((s, i) => mkPlayer(s, 'mine', i));
+  const foes = battle.foesStars.map((s, i) => mkPlayer(s, 'foes', i, S.foePace));
+  mine.forEach((p, i) => { p.x = PITCH.x + PITCH.w * (ballTo === 'mine' && i === 0 ? .46 : .28); p.y = PCY + p.lane; });
+  foes.forEach((p, i) => { p.x = PITCH.x + PITCH.w * (ballTo === 'foes' && i === 0 ? .54 : .72); p.y = PCY + p.lane; });
+  const owner = ballTo === 'mine' ? mine[0] : ballTo === 'foes' ? foes[0] : null;
   battle.sim = {
-    me:  { x: PITCH.x + PITCH.w * .3, y: PCY, dx: 1, dy: 0, moving: false, slide: 0, sdx: 1, sdy: 0, recover: 0 },
-    foe: { x: PITCH.x + PITCH.w * .7, y: PCY, dx: -1, dy: 0, moving: false, stun: 0, veer: 0, veerT: 0, shootCd: 0, tackleCd: 0 },
-    ball: { x: PITCH.x + PITCH.w / 2, y: PCY, vx: 0, vy: 0, owner: ballTo, noMe: 0, noFoe: 0 },
-    gkL: { y: PCY }, gkR: { y: PCY },
+    mine, foes, ctrl: 0,
+    ball: { x: PITCH.x + PITCH.w / 2, y: PCY, vx: 0, vy: 0, owner, kicker: null, noKick: 0, lastTeam: null, blocked: true },
   };
 }
 function startPlay(ballTo) {
@@ -937,44 +989,53 @@ function updateBattle() {
   } else res.classList.remove('show');
 }
 
-/* ---- Acciones del jugador ---- */
+/* ---- Acciones del jugador controlado ---- */
 const inPlay = () => battle && battle.mode === 'play' && !battle.finished;
+const ctrlPlayer = () => battle.sim.mine[battle.sim.ctrl];
 function aimDir(actor, fallbackX) {
   const d = Math.hypot(actor.dx, actor.dy) || 1;
   if (actor.moving || actor.dx || actor.dy) return [actor.dx / d, actor.dy / d];
   return [fallbackX, 0];
 }
+function kickBall(p, vx, vy) {
+  const b = battle.sim.ball;
+  b.x = p.x + (p.dx || (p.team === 'mine' ? 1 : -1)) * 22;
+  b.y = p.y + (p.dy || 0) * 16 + 14;
+  b.owner = null; b.kicker = p; b.noKick = performance.now() + 300;
+  b.lastTeam = p.team; b.blocked = false;
+  b.vx = vx; b.vy = vy;
+}
 function doPass() {
-  if (!inPlay() || battle.sim.ball.owner !== 'me') return;
-  const b = battle.sim.ball, me = battle.sim.me;
-  b.x = me.x + (me.dx || 1) * 22; b.y = me.y + (me.dy || 0) * 16 + 14; // balón en los pies
-  const [dx, dy] = aimDir(me, 1);
-  b.owner = null; b.noMe = performance.now() + 280;
-  b.vx = dx * battle.stats.passSpeed; b.vy = dy * battle.stats.passSpeed;
+  if (!inPlay()) return;
+  const cp = ctrlPlayer(), b = battle.sim.ball;
+  if (b.owner !== cp) return;
+  // al compañero mejor situado (más adelantado, sin irse lejísimos)
+  const mates = battle.sim.mine.filter(p => p !== cp);
+  const best = mates.sort((a, c) => (c.x - Math.abs(c.y - cp.y) * .35) - (a.x - Math.abs(a.y - cp.y) * .35))[0];
+  const tx = best.x + 42, ty = best.y;
+  const ang = Math.atan2(ty - cp.y, tx - cp.x || 1);
+  kickBall(cp, Math.cos(ang) * battle.stats.passSpeed, Math.sin(ang) * battle.stats.passSpeed);
   sfx('select');
 }
 function doShoot() {
-  if (!inPlay() || battle.sim.ball.owner !== 'me') return;
-  const S = battle.stats, sim = battle.sim, b = sim.ball, me = sim.me;
-  b.x = me.x + (me.dx || 1) * 22; b.y = me.y + (me.dy || 0) * 16 + 14; // balón en los pies
-  // apunta al lado que deja libre el portero, con dispersión según distancia
-  const aimY = sim.gkR.y > PCY ? PCY - MOUTH * .6 : PCY + MOUTH * .6;
-  const far = (PITCH.x + PITCH.w - b.x) / PITCH.w;
-  const ty = aimY + (Math.random() - .5) * S.shotSpread * (1 + far * 1.6);
-  const ang = Math.atan2(ty - b.y, PITCH.x + PITCH.w + 16 - b.x);
-  b.owner = null; b.noMe = performance.now() + 320;
-  b.vx = Math.cos(ang) * S.shotSpeed; b.vy = Math.sin(ang) * S.shotSpeed;
+  if (!inPlay()) return;
+  const S = battle.stats, cp = ctrlPlayer(), b = battle.sim.ball;
+  if (b.owner !== cp) return;
+  const far = (PITCH.x + PITCH.w - cp.x) / PITCH.w;
+  const ty = PCY + clamp((cp.y - PCY) * .25, -26, 26) + (Math.random() - .5) * S.shotSpread * (1 + far * 1.5);
+  const ang = Math.atan2(ty - cp.y, PITCH.x + PITCH.w + 16 - cp.x);
+  kickBall(cp, Math.cos(ang) * S.shotSpeed, Math.sin(ang) * S.shotSpeed);
   sfx('hit');
 }
 function doSlide() {
   if (!inPlay()) return;
-  const me = battle.sim.me;
-  if (me.slide > 0 || me.recover > 0) return;
-  const [dx, dy] = aimDir(me, 1);
-  me.slide = 300; me.sdx = dx; me.sdy = dy;
+  const cp = ctrlPlayer();
+  if (cp.slide > 0 || cp.recover > 0) return;
+  const [dx, dy] = aimDir(cp, 1);
+  cp.slide = 300; cp.sdx = dx; cp.sdy = dy;
   sfx('bump');
 }
-// Tiempo muerto → turbo: bebida isotónica = velocidad ×1.4 durante 8 segundos.
+// La bebida isotónica es un turbo para el jugador controlado.
 function useDrink() {
   if (!inPlay() || state.drinks < 1 || battle.boost > 0) return;
   state.drinks--;
@@ -984,143 +1045,193 @@ function useDrink() {
   updateBattle();
 }
 
-/* ---- Simulación del partido (se ejecuta desde el bucle principal) ---- */
+/* ---- Simulación del partido 3c3 ---- */
 function clampActor(a) {
   a.x = clamp(a.x, PITCH.x + 16, PITCH.x + PITCH.w - 16);
   a.y = clamp(a.y, PITCH.y + 18, PITCH.y + PITCH.h - 10);
 }
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function nearestOf(list, target, skip) {
+  let best = null, bd = 1e9;
+  for (const p of list) {
+    if (p === skip || p.slide > 0) continue;
+    const d = dist(p, target);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+function looseBall(p, vx, vy, msg, side) {
+  const b = battle.sim.ball;
+  b.owner = null; b.kicker = null; b.lastTeam = null; b.blocked = true;
+  b.x = p.x; b.y = p.y + 10; b.vx = vx; b.vy = vy;
+  b.noKick = 0;
+  if (msg) { popDamage(side, msg, side === 'me' ? 'bad' : 'goal'); }
+}
 function updateMatch(dt) {
   if (!inPlay() || !battle.sim) return;
   const S = battle.stats, sim = battle.sim, now = performance.now();
-  const me = sim.me, foe = sim.foe, b = sim.ball;
   battle.boost = Math.max(0, battle.boost - dt);
-  // --- tu capitán ---
-  if (me.slide > 0) {
-    me.slide -= dt;
-    me.x += me.sdx * .3 * dt; me.y += me.sdy * .3 * dt;
-    if (b.owner === 'foe' && Math.hypot(foe.x - me.x, foe.y - me.y) < S.tackleRange + 8) {
-      b.owner = null; b.x = foe.x; b.y = foe.y + 8;
-      b.vx = me.sdx * .25; b.vy = me.sdy * .25;
-      b.noFoe = now + 420; foe.stun = 500;
-      popDamage('center', '¡ROBO!', 'goal'); sfx('hit');
+  // cambio automático: controlas al dueño del balón o al más cercano
+  const b = sim.ball;
+  if (b.owner && b.owner.team === 'mine') sim.ctrl = sim.mine.indexOf(b.owner);
+  else {
+    const cur = sim.mine[sim.ctrl];
+    if (cur.slide <= 0) {
+      const near = nearestOf(sim.mine, b);
+      if (near && near !== cur && dist(near, b) < dist(cur, b) - 26) sim.ctrl = sim.mine.indexOf(near);
     }
-    if (me.slide <= 0) me.recover = 430;
+  }
+  // --- jugador controlado ---
+  const cp = sim.mine[sim.ctrl];
+  if (cp.slide > 0) {
+    cp.slide -= dt;
+    cp.x += cp.sdx * .3 * dt; cp.y += cp.sdy * .3 * dt;
+    const carrier = b.owner && b.owner.team === 'foes' ? b.owner : null;
+    if (carrier && dist(cp, carrier) < S.tackleRange + 8) {
+      looseBall(carrier, cp.sdx * .25, cp.sdy * .25, '¡ROBO!', 'foe');
+      b.noKick = now + 150; b.kicker = carrier;
+      carrier.stun = 500;
+      sfx('hit');
+    }
+    if (cp.slide <= 0) cp.recover = 430;
   } else {
-    if (me.recover > 0) me.recover -= dt;
+    if (cp.recover > 0) cp.recover -= dt;
     const mv = battleMove();
-    const sp = S.mySpeed * (battle.boost > 0 ? 1.4 : 1) * (me.recover > 0 ? .45 : 1);
-    me.x += mv.x * sp * dt; me.y += mv.y * sp * dt;
-    if (mv.x || mv.y) { me.dx = mv.x; me.dy = mv.y; me.moving = true; } else me.moving = false;
+    const sp = cp.spd * 1.18 * (battle.boost > 0 ? 1.38 : 1) * (cp.recover > 0 ? .45 : 1);
+    cp.x += mv.x * sp * dt; cp.y += mv.y * sp * dt;
+    if (mv.x || mv.y) { cp.dx = mv.x; cp.dy = mv.y; cp.moving = true; } else cp.moving = false;
   }
-  clampActor(me);
-  updateFoe(dt, now);
+  clampActor(cp);
+  // --- resto de jugadores (IA) ---
+  sim.mine.forEach((p, i) => { if (i !== sim.ctrl) aiMove(p, dt, now); });
+  sim.foes.forEach(p => aiMove(p, dt, now));
   updateBall(dt, now);
-  updateKeepers(dt);
 }
-function updateFoe(dt, now) {
-  const S = battle.stats, sim = battle.sim, foe = sim.foe, me = sim.me, b = sim.ball;
-  if (foe.stun > 0) { foe.stun -= dt; foe.moving = false; return; }
+function aiMove(p, dt, now) {
+  const S = battle.stats, sim = battle.sim, b = sim.ball;
+  if (p.stun > 0) { p.stun -= dt; p.moving = false; return; }
+  if (p.recover > 0) p.recover -= dt;
+  const own = b.owner;
+  const mine = p.team === 'mine';
+  const atk = mine ? 1 : -1;                       // sentido de ataque
+  const goalX = mine ? PITCH.x + PITCH.w : PITCH.x; // portería que ataca
+  const ownGoalX = mine ? PITCH.x : PITCH.x + PITCH.w;
+  const opps = mine ? sim.foes : sim.mine;
   let tx, ty;
-  if (b.owner === 'foe') {
-    // conduce hacia tu portería, cambiando de carril si le cierras el paso
-    if (Math.abs(me.x - foe.x) < 100 && Math.abs(me.y - foe.y) < 52 && now > foe.veerT) {
-      foe.veer = (me.y >= foe.y ? -1 : 1) * (55 + Math.random() * 55);
-      foe.veerT = now + 900;
+  if (own === p) {
+    // portador IA (solo rivales: los tuyos pasan a estar controlados)
+    const presser = nearestOf(opps, p);
+    if (presser && Math.abs(presser.x - p.x) < 100 && Math.abs(presser.y - p.y) < 52 && now > p.veerT) {
+      p.veer = (presser.y >= p.y ? -1 : 1) * (55 + Math.random() * 55);
+      p.veerT = now + 900;
     }
-    tx = PITCH.x + 40;
-    ty = clamp(PCY + (foe.veer || 0), PITCH.y + 30, PITCH.y + PITCH.h - 24);
-    if (foe.x - PITCH.x < S.foeShootRange && now > foe.shootCd) {
-      foe.shootCd = now + 800;
-      if (Math.random() < .55) foeShoot();
+    tx = goalX - atk * 40;
+    ty = clamp(PCY + (p.veer || p.lane), PITCH.y + 30, PITCH.y + PITCH.h - 24);
+    if (Math.abs(goalX - p.x) < S.foeShootRange && now > p.shootCd) {
+      p.shootCd = now + 800;
+      if (Math.random() < .5) aiShoot(p, goalX);
     }
-  } else if (!b.owner) {
-    tx = b.x; ty = b.y;
-  } else {
-    // te persigue e intenta quitártela
-    tx = me.x + 30; ty = me.y;
-    if (Math.hypot(me.x - foe.x, me.y - foe.y) < 42 && now > foe.tackleCd) {
-      foe.tackleCd = now + 1100;
-      if (Math.random() < S.foeTackleProb) {
-        b.owner = null;
-        b.vx = (Math.random() - .5) * .35; b.vy = (Math.random() - .5) * .35;
-        b.noMe = now + 260;
-        popDamage('center', '¡TE LA QUITA!', 'bad'); sfx('miss');
+    if (presser && dist(presser, p) < 48 && now > p.passCd) {
+      p.passCd = now + 900;
+      if (Math.random() < S.foePassProb) aiPass(p);
+    }
+  } else if (own && own.team === p.team) {
+    // su equipo ataca: desmarque por su carril, siempre por delante del balón
+    tx = clamp(own.x + atk * 110, PITCH.x + 40, PITCH.x + PITCH.w - 40);
+    ty = PCY + p.lane * .9;
+  } else if (own) {
+    // defensa: el más cercano presiona al portador, el otro protege la portería
+    if (p === nearestOf(p.team === 'mine' ? sim.mine.filter((q, i) => i !== sim.ctrl) : sim.foes, own)) {
+      tx = own.x; ty = own.y;
+      if (dist(p, own) < 36 && now > p.tackleCd) {
+        p.tackleCd = now + 1200;
+        const prob = mine ? S.mineTackleProb : S.foeTackleProb;
+        if (Math.random() < prob) {
+          looseBall(own, (Math.random() - .5) * .3, (Math.random() - .5) * .3,
+            mine ? '¡RECUPERADA!' : '¡TE LA QUITA!', mine ? 'foe' : 'me');
+          sfx('miss');
+        }
       }
+    } else {
+      tx = (own.x + ownGoalX) / 2; ty = (own.y + PCY) / 2;
     }
+  } else {
+    // balón suelto: el más cercano de cada equipo va a por él
+    if (p === nearestOf(p.team === 'mine' ? sim.mine : sim.foes, b)) { tx = b.x; ty = b.y; }
+    else { tx = PITCH.x + PITCH.w * (mine ? .34 : .66); ty = PCY + p.lane; }
   }
-  const dx = tx - foe.x, dy = ty - foe.y, d = Math.hypot(dx, dy) || 1;
-  const step = Math.min(S.foeSpeed * dt, d);
-  foe.x += dx / d * step; foe.y += dy / d * step;
-  foe.moving = d > 4;
-  if (foe.moving) { foe.dx = dx / d; foe.dy = dy / d; }
-  clampActor(foe);
+  const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
+  const step = Math.min(p.spd * dt, d);
+  p.x += dx / d * step; p.y += dy / d * step;
+  p.moving = d > 5;
+  if (p.moving) { p.dx = dx / d; p.dy = dy / d; }
+  clampActor(p);
 }
-function foeShoot() {
-  const S = battle.stats, sim = battle.sim, b = sim.ball, foe = sim.foe;
-  b.x = foe.x + (foe.dx || -1) * 22; b.y = foe.y + (foe.dy || 0) * 16 + 14; // balón en los pies
-  const aimY = sim.gkL.y > PCY ? PCY - MOUTH * .6 : PCY + MOUTH * .6;
-  const ty = aimY + (Math.random() - .5) * S.foeSpread;
-  const ang = Math.atan2(ty - b.y, PITCH.x - 16 - b.x);
-  b.owner = null; b.noFoe = performance.now() + 320;
-  b.vx = Math.cos(ang) * S.foeShotSpeed; b.vy = Math.sin(ang) * S.foeShotSpeed;
+function aiShoot(p, goalX) {
+  const S = battle.stats;
+  const ty = PCY + (Math.random() - .5) * S.foeSpread;
+  const ang = Math.atan2(ty - p.y, goalX + (p.team === 'mine' ? 16 : -16) - p.x);
+  kickBall(p, Math.cos(ang) * S.foeShotSpeed, Math.sin(ang) * S.foeShotSpeed);
   sfx('hit');
 }
+function aiPass(p) {
+  const sim = battle.sim;
+  const mates = (p.team === 'mine' ? sim.mine : sim.foes).filter(q => q !== p);
+  const atk = p.team === 'mine' ? 1 : -1;
+  const best = mates.sort((a, c) => (c.x * atk - Math.abs(c.y - p.y) * .35) - (a.x * atk - Math.abs(a.y - p.y) * .35))[0];
+  if (!best) return;
+  const ang = Math.atan2(best.y - p.y, (best.x + atk * 42) - p.x || 1);
+  kickBall(p, Math.cos(ang) * .44, Math.sin(ang) * .44);
+  sfx('select');
+}
 function updateBall(dt, now) {
-  const S = battle.stats, sim = battle.sim, me = sim.me, foe = sim.foe, b = sim.ball;
+  const sim = battle.sim, b = sim.ball;
   if (b.owner) {
-    const o = b.owner === 'me' ? me : foe;
-    b.x = o.x + (o.dx || (b.owner === 'me' ? 1 : -1)) * 22;
+    const o = b.owner;
+    b.x = o.x + (o.dx || (o.team === 'mine' ? 1 : -1)) * 22;
     b.y = o.y + (o.dy || 0) * 16 + 14;
     b.vx = b.vy = 0;
   } else {
     b.x += b.vx * dt; b.y += b.vy * dt;
     const f = Math.pow(.9982, dt);
     b.vx *= f; b.vy *= f;
-    if (b.y < PITCH.y + 8)          { b.y = PITCH.y + 8; b.vy = Math.abs(b.vy); }
-    if (b.y > PITCH.y + PITCH.h - 6){ b.y = PITCH.y + PITCH.h - 6; b.vy = -Math.abs(b.vy); }
+    if (b.y < PITCH.y + 8)           { b.y = PITCH.y + 8; b.vy = Math.abs(b.vy); }
+    if (b.y > PITCH.y + PITCH.h - 6) { b.y = PITCH.y + PITCH.h - 6; b.vy = -Math.abs(b.vy); }
+    // bloqueos con el cuerpo: sin porteros, la defensa es el muro
+    const speed = Math.hypot(b.vx, b.vy);
+    if (speed > .34 && !b.blocked && b.lastTeam) {
+      const wall = (b.lastTeam === 'mine' ? sim.foes : sim.mine).find(p => dist(p, b) < 22 && p.stun <= 0);
+      if (wall) {
+        b.blocked = true;
+        if (Math.random() < .62) {
+          b.vx *= -.35; b.vy = (Math.random() - .5) * .4;
+          b.lastTeam = null;
+          popDamage('center', '¡MURO!', 'miss'); sfx('bump');
+        }
+      }
+    }
   }
-  handleGoalLines(now);
-  if (battle.mode !== 'play') return; // se marcó gol en esta misma pasada
-  if (!b.owner && Math.hypot(b.vx, b.vy) < .28) { // los balones rápidos no se controlan al vuelo
-    if (now > b.noMe && me.slide <= 0 && me.recover <= 0 && Math.hypot(me.x - b.x, me.y - b.y) < 26) b.owner = 'me';
-    else if (now > b.noFoe && foe.stun <= 0 && Math.hypot(foe.x - b.x, foe.y - b.y) < 26) b.owner = 'foe';
+  handleGoalLines();
+  if (battle.mode !== 'play') return; // gol en esta misma pasada
+  if (!b.owner && Math.hypot(b.vx, b.vy) < .28) {
+    const takers = [...sim.mine, ...sim.foes]
+      .filter(p => p.slide <= 0 && p.stun <= 0 && !(p === b.kicker && now < b.noKick))
+      .filter(p => !(p.team === 'mine' && p === sim.mine[sim.ctrl] && p.recover > 0))
+      .sort((a, c) => dist(a, b) - dist(c, b));
+    if (takers[0] && dist(takers[0], b) < 26) b.owner = takers[0];
   }
 }
-function handleGoalLines(now) {
-  const S = battle.stats, sim = battle.sim, b = sim.ball;
-  const fast = Math.abs(b.vx) > .15;
+function handleGoalLines() {
+  const sim = battle.sim, b = sim.ball;
   // portería izquierda (la tuya)
   if (b.x <= PITCH.x + 8) {
-    if (Math.abs(b.y - PCY) <= MOUTH) {
-      if (Math.abs(b.y - sim.gkL.y) <= S.myKeeperR) clearBall('L');
-      else if (fast || b.owner === 'foe') return goalFor('foe');
-      else clearBall('L');
-    } else { b.x = PITCH.x + 9; b.vx = Math.abs(b.vx) * .6; }
+    if (Math.abs(b.y - PCY) <= MOUTH) return goalFor('foe');
+    b.x = PITCH.x + 9; b.vx = Math.abs(b.vx) * .6;
   }
   // portería derecha (la del rival)
   if (b.x >= PITCH.x + PITCH.w - 8) {
-    if (Math.abs(b.y - PCY) <= MOUTH) {
-      if (Math.abs(b.y - sim.gkR.y) <= S.foeKeeperR) clearBall('R');
-      else if (fast || b.owner === 'me') return goalFor('me');
-      else clearBall('R');
-    } else { b.x = PITCH.x + PITCH.w - 9; b.vx = -Math.abs(b.vx) * .6; }
-  }
-}
-function clearBall(side) {
-  const b = battle.sim.ball;
-  b.owner = null;
-  b.x = side === 'L' ? PITCH.x + 34 : PITCH.x + PITCH.w - 34;
-  b.vx = (side === 'L' ? 1 : -1) * .38;
-  b.vy = (Math.random() - .5) * .34;
-  b.noMe = b.noFoe = performance.now() + 200;
-  popDamage(side === 'L' ? 'me' : 'foe', '¡PARADÓN!', side === 'L' ? 'heal' : 'miss');
-  sfx('miss');
-}
-function updateKeepers(dt) {
-  const sim = battle.sim, b = sim.ball;
-  for (const gk of [sim.gkL, sim.gkR]) {
-    const target = clamp(b.y, PCY - MOUTH + 8, PCY + MOUTH - 8);
-    gk.y += clamp(target - gk.y, -.09 * dt, .09 * dt);
+    if (Math.abs(b.y - PCY) <= MOUTH) return goalFor('me');
+    b.x = PITCH.x + PITCH.w - 9; b.vx = -Math.abs(b.vx) * .6;
   }
 }
 function goalFor(side) {
@@ -1132,20 +1243,20 @@ function goalFor(side) {
     spawnConfetti('foe');
     popDamage('foe', '¡GOL!', 'goal'); sfx('goal');
     setBanner('¡GOOOL!');
-    battleText(`¡GOOOL de ${hero.name}! (${battle.myGoals}-${battle.rivalGoals})`);
+    battleText(`¡GOOOL del equipo de ${hero.name}! (${battle.myGoals}-${battle.rivalGoals})`);
   } else {
     battle.rivalGoals++;
     popDamage('me', 'GOL RIVAL', 'bad'); sfx('concede');
     setBanner('GOL RIVAL', true);
-    battleText(`${battle.rival.name} marca… (${battle.myGoals}-${battle.rivalGoals})`);
+    battleText(`Marca el equipo de ${battle.rival.name}… (${battle.myGoals}-${battle.rivalGoals})`);
   }
   updateBattle();
   setTimeout(() => {
     if (!battle) return;
     if (battle.myGoals >= GOALS_TO_WIN) return winMatch();
     if (battle.rivalGoals >= GOALS_TO_WIN) return loseMatch();
-    startPlay(side === 'me' ? 'foe' : 'me');
-    battleText(side === 'me' ? '¡Saca el rival: defiende!' : '¡Sacas tú: al ataque!');
+    startPlay(side === 'me' ? 'foes' : 'mine');
+    battleText(side === 'me' ? '¡Saca el rival: defiende!' : '¡Sacáis vosotros: al ataque!');
   }, 1500);
 }
 function winMatch() {
@@ -1173,7 +1284,7 @@ function loseMatch() {
   sfx('fail');
   state.coins = Math.max(0, state.coins - 15);
   save();
-  $('#result-copy').textContent = 'Te retiras al centro médico (−15 🪙). ¡La próxima vez descoloca al portero!';
+  $('#result-copy').textContent = 'Te retiras al centro médico (−15 🪙). ¡Usa el pase para superar su muro!';
   updateBattle();
   setTimeout(() => { if (battle) endBattle('defeat'); }, 2000);
 }
@@ -1189,7 +1300,7 @@ function bossVictory() {
 }
 function contract() {
   if (!battle || battle.busy || battle.boss || battle.finished !== 'win') return;
-  if (state.balls < 1) { battleText('No te quedan balones contrato. Busca cofres o visita la tienda.'); return; }
+  if (state.balls < 1) { $('#result-copy').textContent = 'No te quedan balones contrato. Busca cofres o visita la tienda.'; return; }
   battle.busy = true;
   state.balls--; save(); updateBattle();
   $('#result-copy').textContent = `Lanzas un balón contrato a ${battle.rival.name}…`;
@@ -1253,6 +1364,8 @@ function drawGoalFrame(x, cy) {
   for (let i = -7; i <= 7; i += 5) { pctx.beginPath(); pctx.moveTo(x + i, cy - MOUTH); pctx.lineTo(x + i, cy + MOUTH); pctx.stroke(); }
   for (let j = -MOUTH + 4; j <= MOUTH - 4; j += 12) { pctx.beginPath(); pctx.moveTo(x - 9, cy + j); pctx.lineTo(x + 9, cy + j); pctx.stroke(); }
 }
+const HAIRS = ['#3a2b20', '#151515', '#5b3f27', '#241a12', '#6e4a1f', '#803c1e'];
+const SKINS = ['#f2b98a', '#e8ab7c', '#c98e69', '#a06a48', '#f5c89a', '#8a5636'];
 function drawPitchActor(x, y, look, dir, time, walking, opts = {}) {
   const s = opts.scale || 1.75;
   pctx.save();
@@ -1273,7 +1386,7 @@ function drawBallAt(bx, by, time, speed) {
   pctx.fillStyle = INK;
   pctx.beginPath(); pctx.arc(bx + Math.sin(spin) * 3.5, by - 4 - Math.cos(spin) * 3.5, 3, 0, Math.PI * 2); pctx.fill();
 }
-const actorFacing = dirOf => Math.abs(dirOf.dx) >= Math.abs(dirOf.dy || 0) ? (dirOf.dx >= 0 ? 'right' : 'left') : (dirOf.dy > 0 ? 'down' : 'up');
+const actorFacing = p => Math.abs(p.dx) >= Math.abs(p.dy || 0) ? (p.dx >= 0 ? 'right' : 'left') : (p.dy > 0 ? 'down' : 'up');
 function drawPitch(time) {
   const W = pitchCanvas.width, H = pitchCanvas.height;
   pctx.clearRect(0, 0, W, H);
@@ -1312,35 +1425,41 @@ function drawPitch(time) {
   const sim = battle.sim;
   if (sim) {
     const hero = STARS.find(s => s.id === state.captain) || STARS[0];
-    const meLook = { skin: '#f2b98a', hair: '#3a2b20', suit: hero.color, accent: '#ffffff' };
-    const foeLook = battle.rival.id === 'sombra'
-      ? { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }
-      : { skin: '#e8ab7c', hair: '#241a12', suit: battle.rival.color, accent: '#ffffff' };
-    const gkLook = { skin: '#f2b98a', hair: '#4a3521', suit: '#95a3bd', accent: '#e8edf5' };
-    // porteros
-    drawPitchActor(PITCH.x + 4, sim.gkL.y + 30, gkLook, 'right', time, true, { scale: 1.35 });
-    drawPitchActor(PITCH.x + PITCH.w - 4, sim.gkR.y + 30, gkLook, 'left', time, true, { scale: 1.35 });
+    const cp = sim.mine[sim.ctrl];
     // estela de turbo
     if (battle.boost > 0) {
       pctx.strokeStyle = '#45d9ff88'; pctx.lineWidth = 4; pctx.lineCap = 'round';
       for (let i = 1; i <= 3; i++) {
         pctx.beginPath();
-        pctx.moveTo(sim.me.x - sim.me.dx * 14 * i, sim.me.y - 10 - sim.me.dy * 14 * i);
-        pctx.lineTo(sim.me.x - sim.me.dx * (14 * i + 12), sim.me.y - 10 - sim.me.dy * (14 * i + 12));
+        pctx.moveTo(cp.x - cp.dx * 14 * i, cp.y - 10 - cp.dy * 14 * i);
+        pctx.lineTo(cp.x - cp.dx * (14 * i + 12), cp.y - 10 - cp.dy * (14 * i + 12));
         pctx.stroke();
       }
       pctx.lineCap = 'butt';
     }
-    // jugadores
-    drawPitchActor(sim.me.x, sim.me.y, meLook, actorFacing(sim.me), time, sim.me.moving,
-      { lying: sim.me.slide > 0 || sim.me.recover > 200, lieSign: sim.me.sdx });
-    drawPitchActor(sim.foe.x, sim.foe.y, foeLook, actorFacing(sim.foe), time, sim.foe.moving,
-      battle.rival.id === 'sombra' ? { eyes: '#ff3355', aura: true } : {});
-    // flecha sobre tu jugador
-    const ay = sim.me.y - 92 + Math.sin(time / 220) * 4;
+    // los 6 jugadores, ordenados por profundidad
+    const everyone = [...sim.mine, ...sim.foes].sort((a, c) => a.y - c.y);
+    for (const p of everyone) {
+      const idx = Math.abs((p.star.rating || 84) + p.i * 3);
+      const dark = battle.boss && p.team === 'foes';
+      const look = dark
+        ? { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }
+        : {
+            skin: SKINS[idx % SKINS.length],
+            hair: HAIRS[(idx + p.i) % HAIRS.length],
+            suit: p.team === 'mine' ? hero.color : battle.foeKit,
+            accent: '#ffffff',
+          };
+      const opts = { lying: p.slide > 0 || p.recover > 200, lieSign: p.sdx };
+      if (dark && p.i === 0) { opts.eyes = '#ff3355'; opts.aura = true; }
+      else if (dark) opts.eyes = '#ff3355';
+      drawPitchActor(p.x, p.y, look, actorFacing(p), time, p.moving, opts);
+    }
+    // flecha sobre tu jugador controlado
+    const ay = cp.y - 92 + Math.sin(time / 220) * 4;
     pctx.fillStyle = '#ffce00'; pctx.strokeStyle = INK; pctx.lineWidth = 2.5;
     pctx.beginPath();
-    pctx.moveTo(sim.me.x, ay); pctx.lineTo(sim.me.x - 9, ay - 13); pctx.lineTo(sim.me.x + 9, ay - 13);
+    pctx.moveTo(cp.x, ay); pctx.lineTo(cp.x - 9, ay - 13); pctx.lineTo(cp.x + 9, ay - 13);
     pctx.closePath(); pctx.fill(); pctx.stroke();
     // balón
     const speed = Math.hypot(sim.ball.vx, sim.ball.vy);
@@ -1360,9 +1479,9 @@ function drawPitch(time) {
 
 /* Tutorial de combate (solo la primera vez). */
 const TUTORIAL = [
-  { t: '⚽ ¡Manejas tú!', x: 'Como en el FIFA: pon el dedo en el campo y arrastra — aparece un joystick flotante (en teclado, WASD/flechas). El primero en marcar 3 goles gana el partido.' },
-  { t: '🎮 Pase, chute y segada', x: 'PASE (Espacio): toque al hueco para dejar atrás al rival. CHUTE (X): dispara buscando el lado que deja libre el portero. SEGADA (C): barrida para robar el balón — si fallas, tardas en levantarte. 🥤 = turbo de velocidad.' },
-  { t: '✍️ Si ganas, lo fichas', x: 'Tras el pitido final, lanza el balón contrato: cuanto mayor sea la goleada, más fácil convencerle. ¡Suerte, míster!' },
+  { t: '⚽ ¡3 contra 3!', x: 'Pon el dedo en el campo y arrastra: aparece un joystick flotante (en teclado, WASD/flechas). Controlas al jugador con la flecha amarilla — cambia solo al más cercano al balón. El primero en marcar 3 goles gana.' },
+  { t: '🎮 Pase, chute y segada', x: 'PASE (Espacio): se la das al compañero mejor situado. CHUTE (X): no hay porteros, ¡pero los rivales bloquean los tiros con el cuerpo — busca el hueco! SEGADA (C): barrida para robar. 🥤 = turbo de velocidad.' },
+  { t: '✍️ Si ganas, lo fichas', x: 'Tras el pitido final, lanza el balón contrato al capitán rival: cuanto mayor sea la goleada, más fácil convencerle. ¡Suerte, míster!' },
 ];
 let tutStep = 0;
 function openTutorial() {
@@ -1488,10 +1607,7 @@ function continueGame() {
 }
 
 /* ---------------- Entrada ---------------- */
-$$('[data-dir]').forEach(b => {
-  b.onpointerdown = e => { e.preventDefault(); held = b.dataset.dir; tryMove(held); };
-  b.onpointerup = b.onpointerleave = b.onpointercancel = () => { held = null; };
-});
+
 const KEYMAP = { ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down', ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right' };
 document.addEventListener('keydown', e => {
   const dir = KEYMAP[e.key];
@@ -1529,37 +1645,58 @@ $$('[data-baction]').forEach(b => b.onpointerdown = e => {
 });
 $('#drink-btn').onclick = useDrink;
 $('#quit-btn').onclick = () => { if (battle && !battle.busy) endBattle('flee'); };
-// Joystick flotante: aparece donde apoyas el dedo sobre el campo.
-const joyBase = $('#joy-base'), joyStick = $('#joy-stick'), bfEl = $('#battlefield');
-const JOY_R = 52;
-function joyReset() {
-  joy.active = false; joy.id = null; joy.x = joy.y = 0;
-  joyBase.classList.remove('on');
-  joyStick.style.transform = 'translate(-50%,-50%)';
+/* Joysticks flotantes: el mismo control en el mundo y en los partidos. */
+function makeJoystick(surface, baseEl, stickEl, opts) {
+  const st = { active: false, id: null, bx: 0, by: 0 };
+  const R = 52;
+  function reset() {
+    st.active = false; st.id = null;
+    baseEl.classList.remove('on');
+    stickEl.style.transform = 'translate(-50%,-50%)';
+    opts.onMove(0, 0, false);
+  }
+  surface.addEventListener('pointerdown', e => {
+    if (st.active) return;
+    if (opts.blocked && opts.blocked()) return;
+    if (e.target.closest('button,.result-card,.tut-card,.nameplate,#minimap,#objective-hud,.dialog')) return;
+    st.active = true; st.id = e.pointerId;
+    const r = surface.getBoundingClientRect();
+    st.bx = e.clientX - r.left; st.by = e.clientY - r.top;
+    baseEl.style.left = st.bx + 'px'; baseEl.style.top = st.by + 'px';
+    baseEl.classList.add('on');
+    surface.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+  surface.addEventListener('pointermove', e => {
+    if (!st.active || e.pointerId !== st.id) return;
+    const r = surface.getBoundingClientRect();
+    let dx = (e.clientX - r.left) - st.bx, dy = (e.clientY - r.top) - st.by;
+    const d = Math.hypot(dx, dy);
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    stickEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    opts.onMove(dx / R, dy / R, true);
+  });
+  ['pointerup', 'pointercancel'].forEach(ev =>
+    surface.addEventListener(ev, e => { if (st.active && e.pointerId === st.id) reset(); }));
+  return { reset };
 }
-bfEl.addEventListener('pointerdown', e => {
-  if (!battle || battle.finished || joy.active) return;
-  if (e.target.closest('button') || e.target.closest('.result-card') || e.target.closest('.tut-card') || e.target.closest('.nameplate')) return;
-  joy.active = true; joy.id = e.pointerId;
-  const r = bfEl.getBoundingClientRect();
-  joy.bx = e.clientX - r.left; joy.by = e.clientY - r.top;
-  joyBase.style.left = joy.bx + 'px'; joyBase.style.top = joy.by + 'px';
-  joyBase.classList.add('on');
-  bfEl.setPointerCapture?.(e.pointerId);
-  e.preventDefault();
+const battleJoyCtl = makeJoystick($('#battlefield'), $('#joy-base'), $('#joy-stick'), {
+  blocked: () => !battle || !!battle.finished,
+  onMove: (x, y, active) => { joy.x = x; joy.y = y; joy.active = active; },
 });
-bfEl.addEventListener('pointermove', e => {
-  if (!joy.active || e.pointerId !== joy.id) return;
-  const r = bfEl.getBoundingClientRect();
-  let dx = (e.clientX - r.left) - joy.bx, dy = (e.clientY - r.top) - joy.by;
-  const d = Math.hypot(dx, dy);
-  if (d > JOY_R) { dx *= JOY_R / d; dy *= JOY_R / d; }
-  joy.x = dx / JOY_R; joy.y = dy / JOY_R;
-  joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+function joyReset() { battleJoyCtl.reset(); }
+let heldByJoy = false;
+makeJoystick($('#world-view'), $('#wjoy-base'), $('#wjoy-stick'), {
+  blocked: () => !!battle || dialogOpen() || !$('#world-view').classList.contains('active'),
+  onMove: (x, y, active) => {
+    if (!active || Math.hypot(x, y) < .3) {
+      if (heldByJoy) { held = null; heldByJoy = false; }
+      return;
+    }
+    held = Math.abs(x) >= Math.abs(y) ? (x > 0 ? 'right' : 'left') : (y > 0 ? 'down' : 'up');
+    heldByJoy = true;
+  },
 });
-['pointerup', 'pointercancel'].forEach(ev => bfEl.addEventListener(ev, e => {
-  if (joy.active && e.pointerId === joy.id) joyReset();
-}));
 // Nada de menú contextual (copiar/pegar) al mantener pulsado: esto es un juego.
 document.addEventListener('contextmenu', e => e.preventDefault());
 $('#contract-btn').onclick = contract;
