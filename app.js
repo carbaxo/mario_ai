@@ -190,7 +190,7 @@ const SFX = {
 function sfx(name) {
   if (state.muted || !SFX[name]) return;
   try {
-    AC ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
     const t0 = AC.currentTime;
     for (const [freq, off, dur] of SFX[name]) {
       const o = AC.createOscillator(), g = AC.createGain();
@@ -1137,6 +1137,9 @@ $('#buy-ball').onclick = () => buy('ball');
 $('#buy-drink').onclick = () => buy('drink');
 $('#shop-close').onclick = () => $('#shop').classList.remove('show');
 $('#sound-btn').onclick = () => { state.muted = !state.muted; save(); sfx('select'); };
+// Salida de emergencia del aviso de rotación: es un gesto del usuario, así que
+// aprovechamos para intentar el bloqueo apaisado; si falla, se juega en vertical.
+$('#rotate-skip').onclick = () => { goLandscape(); $('#rotate-overlay').classList.add('dismissed'); };
 
 /* ---------------- Arranque y bucle principal ---------------- */
 // PWA: service worker para jugar sin conexión e instalar en Android.

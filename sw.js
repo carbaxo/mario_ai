@@ -2,7 +2,7 @@
 /* Service worker de FutMon World: precachea la app para jugar sin conexión.
    IMPORTANTE: al cambiar cualquier fichero del juego, sube la versión de CACHE
    para que los jugadores reciban la actualización. */
-const CACHE = 'futmon-world-v1';
+const CACHE = 'futmon-world-v2';
 const CORE = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
@@ -13,8 +13,14 @@ const CORE = [
   './assets/portraits/musiala.webp', './assets/portraits/saliba.webp',
 ];
 
+// Precaché tolerante: un fichero que falle no debe impedir instalar la app;
+// lo que falte se cachea después en el manejador de fetch.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(CORE.map(u => c.add(u))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -25,15 +31,18 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Caché primero, red como respaldo (y se guarda lo que llegue de la red).
+// Caché primero, red como respaldo. Las navegaciones (abrir la app desde el
+// icono) nunca deben quedarse en blanco: si todo falla, se sirve el index cacheado.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy));
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      }
       return res;
-    }))
+    })).catch(() => (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined))
   );
 });

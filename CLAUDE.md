@@ -51,7 +51,7 @@ Smoke test recomendado con Playwright (Chromium): cargar la página, comprobar q
 ## Convenciones
 
 - Mantén el juego **mobile-first**: controles táctiles superpuestos (media query `pointer:coarse`) y teclado en escritorio. Cualquier función nueva debe ser usable con ambos.
-- En móvil el juego es **solo apaisado**: el manifest bloquea `landscape` en la PWA instalada, `goLandscape()` intenta pantalla completa + `orientation.lock` en el navegador, y `#rotate-overlay` (CSS puro, `pointer:coarse + portrait`) tapa el juego en vertical. Hay un bloque de estilos compactos para alturas ≤540px apaisadas: si añades UI, revísala también ahí.
+- En móvil el juego es **solo apaisado**: el manifest bloquea `landscape` en la PWA instalada, `goLandscape()` intenta pantalla completa + `orientation.lock` en el navegador, y `#rotate-overlay` (CSS puro, `pointer:coarse + portrait`) tapa el juego en vertical — siempre con el botón «Jugar igualmente» como salida: nunca dejes al jugador bloqueado sin escape. Hay un bloque de estilos compactos para alturas ≤540px apaisadas: si añades UI, revísala también ahí.
 - Rutas siempre **relativas** (`./…`) en manifest y service worker: GitHub Pages sirve bajo subruta.
 - Los `id` de jugadores/entrenadores son claves estables (saves, retratos): no los renombres.
 - El canvas del mundo es 960×528 (20×11 casillas de 48px); si cambias `TILE`/`VIEW_*`, actualiza también el atributo del canvas en `index.html` y el tamaño de `vignette`.
