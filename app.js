@@ -148,7 +148,7 @@ const DEFAULT = {
   version: 2, x: 7, y: 7, balls: 6, coins: 100, drinks: 2,
   owned: ['lamine'], captain: 'lamine', hp: 100, level: 5,
   wins: 0, steps: 0, chests: [], coach: null, chapter: 0,
-  stadiumWins: 0, bossWins: 0, tutorialSeen: false, muted: false, storySeen: false,
+  stadiumWins: 0, bossWins: 0, tutorialSeen: false, muted: false, storySeen: false, worldHint: false,
 };
 function load() {
   try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem('futmon-world') || '{}') } }
@@ -230,7 +230,14 @@ function showView(id) {
   const cinematic = ['title-view', 'coach-view', 'story-view', 'ending-view'].includes(id);
   setGameChrome(!cinematic && id !== 'battle-view');
   $$('#game-nav button').forEach(b => b.classList.remove('active'));
-  if (id === 'world-view') $('#nav-world').classList.add('active');
+  if (id === 'world-view') {
+    $('#nav-world').classList.add('active');
+    // primera vez en el mapa con pantalla táctil: enseña el joystick
+    if (!state.worldHint && state.coach && matchMedia('(pointer:coarse)').matches) {
+      state.worldHint = true; save();
+      message('🕹️ Arrastra el dedo por la pantalla para moverte');
+    }
+  }
   if (id === 'team-view') { $('#nav-team').classList.add('active'); renderTeam(); }
   if (id === 'journal-view') { $('#nav-journal').classList.add('active'); renderJournal(); }
   if (id === 'help-view') $('#nav-help').classList.add('active');
@@ -1716,6 +1723,16 @@ $('#sound-btn').onclick = () => { state.muted = !state.muted; save(); sfx('selec
 $('#rotate-skip').onclick = () => { goLandscape(); $('#rotate-overlay').classList.add('dismissed'); };
 
 /* ---------------- Arranque y bucle principal ---------------- */
+// Autocuración: si el HTML y este JS vienen de versiones distintas (caché a
+// medias durante una actualización), recarga una vez para realinearlos.
+const BUILD = 'v8';
+try {
+  const tag = $('#build-tag');
+  if (tag && tag.textContent.trim() !== BUILD && !sessionStorage.getItem('futmon-reloaded')) {
+    sessionStorage.setItem('futmon-reloaded', '1');
+    location.reload();
+  } else sessionStorage.removeItem('futmon-reloaded');
+} catch { /* sessionStorage puede no estar disponible */ }
 // PWA: service worker para jugar sin conexión e instalar en Android.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* p. ej. file:// o sin permisos */ });
