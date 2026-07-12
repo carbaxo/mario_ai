@@ -228,7 +228,7 @@ function setGameChrome(on) {
 function showView(id) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === id));
   const cinematic = ['title-view', 'coach-view', 'story-view', 'ending-view'].includes(id);
-  setGameChrome(!cinematic);
+  setGameChrome(!cinematic && id !== 'battle-view');
   $$('#game-nav button').forEach(b => b.classList.remove('active'));
   if (id === 'world-view') $('#nav-world').classList.add('active');
   if (id === 'team-view') { $('#nav-team').classList.add('active'); renderTeam(); }
@@ -775,7 +775,13 @@ const fieldXY = (fx, fy) => [PITCH.x + fx * PITCH.w, PITCH.y + fy * PITCH.h];
 
 /* ---- Entrada del partido (cruceta táctil + teclado) ---- */
 const battleKeys = { up: false, down: false, left: false, right: false };
+const joy = { active: false, id: null, bx: 0, by: 0, x: 0, y: 0 };
 function battleMove() {
+  const jm = Math.hypot(joy.x, joy.y);
+  if (joy.active && jm > .16) {
+    const k = Math.min(1, jm); // analógico: empuja poco = anda, empuja a tope = corre
+    return { x: joy.x / jm * k, y: joy.y / jm * k };
+  }
   let x = (battleKeys.right ? 1 : 0) - (battleKeys.left ? 1 : 0);
   let y = (battleKeys.down ? 1 : 0) - (battleKeys.up ? 1 : 0);
   if (x && y) { x *= .707; y *= .707; }
@@ -805,7 +811,12 @@ function popDamage(side, text, kind = '') {
   bf.appendChild(el);
   setTimeout(() => el.remove(), 950);
 }
-function battleText(t) { $('#battle-text').textContent = t; }
+function battleText(t) {
+  const el = $('#battle-text');
+  el.textContent = t; el.classList.add('show');
+  clearTimeout(battleText.t);
+  battleText.t = setTimeout(() => el.classList.remove('show'), 3000);
+}
 
 function startEncounter() {
   const ids = ENCOUNTER_POOLS[zone()] || STARS.map(s => s.id);
@@ -868,7 +879,11 @@ function setupBattle() {
   // Pista de ventajas: qué aporta tu capitán y tu entrenador en el campo.
   const perk = { DEL: 'chute más potente y preciso', MED: 'más velocidad y mejor pase', DEF: 'segada más larga', POR: 'tu portero es gigante' }[hero.pos];
   const coach = COACHES.find(v => v.id === state.coach);
-  $('#matchup').textContent = `⭐ ${hero.pos}: ${perk}${coach ? ` · 🎓 ${coach.name}: ${coach.skill.toLowerCase()}` : ''}${battle.boss ? ' · ⚠️ Jefe: no se puede fichar' : ''}`;
+  const mUp = $('#matchup');
+  mUp.textContent = `⭐ ${hero.pos}: ${perk}${coach ? ` · 🎓 ${coach.name}: ${coach.skill.toLowerCase()}` : ''}${battle.boss ? ' · ⚠️ Jefe: no se puede fichar' : ''}`;
+  mUp.classList.remove('hide');
+  setTimeout(() => mUp.classList.add('hide'), 6500);
+  $('#match-result').classList.remove('show');
   resetPositions(null);
   updateBattle();
   sfx('whistle');
@@ -901,15 +916,25 @@ function updateBattle() {
   paint('#hero-goals', battle.myGoals);
   paint('#rival-goals', battle.rivalGoals);
   const playing = battle.mode === 'play' && !battle.finished;
-  $('#pass-btn').disabled = $('#shoot-btn').disabled = $('#slide-btn').disabled = !playing;
+  $$('.action-cluster button').forEach(b => b.disabled = !playing);
   $('#drink-btn').disabled = !playing || state.drinks < 1 || battle.boost > 0;
-  $('#odds-drink').textContent = battle.boost > 0 ? '¡turbo activo!' : `velocidad ×1.4 durante 8 s · quedan ${state.drinks}`;
-  $('#run-btn').disabled = battle.busy;
-  $('#contract-btn').disabled = battle.busy || battle.boss || battle.finished !== 'win' || state.balls < 1;
-  $('#contract-odds').textContent = battle.boss ? 'no disponible contra jefes'
-    : battle.finished !== 'win' ? 'gana el partido para fichar'
-    : state.balls < 1 ? 'sin balones: tienda o cofres'
-    : `${state.balls} balones · ${Math.round(captureChance() * 100)}% de éxito`;
+  $('#drink-badge').textContent = state.drinks;
+  $('#quit-btn').disabled = battle.busy;
+  // panel de resultado al pitido final
+  const res = $('#match-result');
+  if (battle.finished) {
+    res.classList.add('show');
+    const win = battle.finished === 'win';
+    $('#result-title').textContent = win ? `¡VICTORIA ${battle.myGoals}-${battle.rivalGoals}!` : `DERROTA ${battle.myGoals}-${battle.rivalGoals}`;
+    const cBtn = $('#contract-btn');
+    cBtn.style.display = win && !battle.boss ? 'block' : 'none';
+    cBtn.disabled = battle.busy || state.balls < 1;
+    $('#contract-odds').textContent = state.balls < 1 ? 'sin balones: tienda o cofres' : `${state.balls} balones · ${Math.round(captureChance() * 100)}% de éxito`;
+    const rBtn = $('#run-btn');
+    rBtn.style.display = battle.finished === 'loss' || battle.boss ? 'none' : 'block';
+    rBtn.textContent = win && !battle.boss ? 'Seguir sin fichar' : 'Volver al mapa';
+    rBtn.disabled = battle.busy;
+  } else res.classList.remove('show');
 }
 
 /* ---- Acciones del jugador ---- */
@@ -1139,7 +1164,7 @@ function winMatch() {
     save(); checkProgress();
   }
   setBanner('¡VICTORIA!');
-  battleText(`¡Pitido final! Ganas ${battle.myGoals}-${battle.rivalGoals} (+${prize} 🪙). ¡Lanza el balón contrato para fichar a ${battle.rival.name}!`);
+  $('#result-copy').textContent = `+${prize} 🪙 · ¡Lanza el balón contrato para fichar a ${battle.rival.name}!`;
   updateBattle();
 }
 function loseMatch() {
@@ -1148,7 +1173,7 @@ function loseMatch() {
   sfx('fail');
   state.coins = Math.max(0, state.coins - 15);
   save();
-  battleText(`Pitido final: pierdes ${battle.myGoals}-${battle.rivalGoals}. Te retiras al centro médico (−15 🪙).`);
+  $('#result-copy').textContent = 'Te retiras al centro médico (−15 🪙). ¡La próxima vez descoloca al portero!';
   updateBattle();
   setTimeout(() => { if (battle) endBattle('defeat'); }, 2000);
 }
@@ -1158,7 +1183,7 @@ function bossVictory() {
   state.level = Math.min(30, state.level + 2);
   save(); sfx('sign');
   setBanner('¡VICTORIA!');
-  battleText(`¡Ganas la final ${battle.myGoals}-${battle.rivalGoals}! Sombra se retira. +200 🪙 y +5 balones contrato.`);
+  $('#result-copy').textContent = '¡Sombra se retira! +200 🪙 y +5 balones contrato.';
   updateBattle();
   setTimeout(() => { if (!battle) return; endBattle('bosswin'); checkProgress(); }, 2200);
 }
@@ -1167,7 +1192,7 @@ function contract() {
   if (state.balls < 1) { battleText('No te quedan balones contrato. Busca cofres o visita la tienda.'); return; }
   battle.busy = true;
   state.balls--; save(); updateBattle();
-  battleText(`Lanzas un balón contrato a ${battle.rival.name}…`);
+  $('#result-copy').textContent = `Lanzas un balón contrato a ${battle.rival.name}…`;
   popDamage('foe', '⚽');
   const chance = captureChance();
   setTimeout(() => {
@@ -1177,12 +1202,12 @@ function contract() {
       if (isNew) state.owned.push(battle.rival.id); else state.coins += 15;
       save(); sfx('sign');
       spawnConfetti('foe');
-      battleText(isNew ? `¡Fichaje conseguido! ${battle.rival.name} se une a tu equipo. 🎉` : `${battle.rival.name} renueva contigo (+15 🪙).`);
+      $('#result-copy').textContent = isNew ? `¡Fichaje conseguido! ${battle.rival.name} se une a tu equipo. 🎉` : `${battle.rival.name} renueva contigo (+15 🪙).`;
       checkProgress();
       setTimeout(() => { if (battle) endBattle('signed'); }, 1700);
     } else {
       sfx('fail');
-      battleText(`${battle.rival.name} lo rechaza: quiere verte ganar con más autoridad. Puedes intentarlo otra vez.`);
+      $('#result-copy').textContent = `${battle.rival.name} lo rechaza… ¡puedes intentarlo otra vez!`;
       battle.busy = false;
       updateBattle();
     }
@@ -1191,6 +1216,8 @@ function contract() {
 function endBattle(result) {
   battle = null;
   Object.keys(battleKeys).forEach(k => battleKeys[k] = false);
+  joyReset();
+  $('#match-result').classList.remove('show');
   if (result === 'defeat') {
     state.x = 6; state.y = 7;
     syncPlayer(); save();
@@ -1333,7 +1360,7 @@ function drawPitch(time) {
 
 /* Tutorial de combate (solo la primera vez). */
 const TUTORIAL = [
-  { t: '⚽ ¡Manejas tú!', x: 'Como en el FIFA: mueve a tu capitán con la cruceta (o WASD/flechas). El primero en marcar 3 goles gana el partido.' },
+  { t: '⚽ ¡Manejas tú!', x: 'Como en el FIFA: pon el dedo en el campo y arrastra — aparece un joystick flotante (en teclado, WASD/flechas). El primero en marcar 3 goles gana el partido.' },
   { t: '🎮 Pase, chute y segada', x: 'PASE (Espacio): toque al hueco para dejar atrás al rival. CHUTE (X): dispara buscando el lado que deja libre el portero. SEGADA (C): barrida para robar el balón — si fallas, tardas en levantarte. 🥤 = turbo de velocidad.' },
   { t: '✍️ Si ganas, lo fichas', x: 'Tras el pitido final, lanza el balón contrato: cuanto mayor sea la goleada, más fácil convencerle. ¡Suerte, míster!' },
 ];
@@ -1496,18 +1523,45 @@ $('#nav-team').onclick = () => showView('team-view');
 $('#nav-journal').onclick = () => showView('journal-view');
 $('#nav-help').onclick = () => showView('help-view');
 $$('.close-panel').forEach(b => b.onclick = () => showView('world-view'));
-$('#pass-btn').onclick = doPass;
-$('#shoot-btn').onclick = doShoot;
-$('#slide-btn').onclick = doSlide;
-$$('[data-bdir]').forEach(b => {
-  b.onpointerdown = e => { e.preventDefault(); battleKeys[b.dataset.bdir] = true; };
-  b.onpointerup = b.onpointerleave = b.onpointercancel = () => { battleKeys[b.dataset.bdir] = false; };
-});
 $$('[data-baction]').forEach(b => b.onpointerdown = e => {
   e.preventDefault();
   ({ pass: doPass, shoot: doShoot, slide: doSlide })[b.dataset.baction]();
 });
 $('#drink-btn').onclick = useDrink;
+$('#quit-btn').onclick = () => { if (battle && !battle.busy) endBattle('flee'); };
+// Joystick flotante: aparece donde apoyas el dedo sobre el campo.
+const joyBase = $('#joy-base'), joyStick = $('#joy-stick'), bfEl = $('#battlefield');
+const JOY_R = 52;
+function joyReset() {
+  joy.active = false; joy.id = null; joy.x = joy.y = 0;
+  joyBase.classList.remove('on');
+  joyStick.style.transform = 'translate(-50%,-50%)';
+}
+bfEl.addEventListener('pointerdown', e => {
+  if (!battle || battle.finished || joy.active) return;
+  if (e.target.closest('button') || e.target.closest('.result-card') || e.target.closest('.tut-card') || e.target.closest('.nameplate')) return;
+  joy.active = true; joy.id = e.pointerId;
+  const r = bfEl.getBoundingClientRect();
+  joy.bx = e.clientX - r.left; joy.by = e.clientY - r.top;
+  joyBase.style.left = joy.bx + 'px'; joyBase.style.top = joy.by + 'px';
+  joyBase.classList.add('on');
+  bfEl.setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+});
+bfEl.addEventListener('pointermove', e => {
+  if (!joy.active || e.pointerId !== joy.id) return;
+  const r = bfEl.getBoundingClientRect();
+  let dx = (e.clientX - r.left) - joy.bx, dy = (e.clientY - r.top) - joy.by;
+  const d = Math.hypot(dx, dy);
+  if (d > JOY_R) { dx *= JOY_R / d; dy *= JOY_R / d; }
+  joy.x = dx / JOY_R; joy.y = dy / JOY_R;
+  joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+});
+['pointerup', 'pointercancel'].forEach(ev => bfEl.addEventListener(ev, e => {
+  if (joy.active && e.pointerId === joy.id) joyReset();
+}));
+// Nada de menú contextual (copiar/pegar) al mantener pulsado: esto es un juego.
+document.addEventListener('contextmenu', e => e.preventDefault());
 $('#contract-btn').onclick = contract;
 $('#run-btn').onclick = () => { if (battle && !battle.busy) endBattle('flee'); };
 $('#tut-next').onclick = nextTutorial;
