@@ -5,7 +5,9 @@
    - Recursos estáticos: caché primero para que el juego vaya rápido y offline.
    IMPORTANTE: al cambiar cualquier fichero del juego, sube la versión de CACHE
    (y la etiqueta de versión del título en index.html). */
-const CACHE = 'futmon-world-v7';
+const CACHE = 'futmon-world-v8';
+// El "app shell" va con red-primero: HTML, JS y CSS se actualizan siempre juntos.
+const FRESH = ['', 'index.html', 'app.js', 'styles.css', 'manifest.webmanifest'];
 const CORE = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
@@ -37,17 +39,22 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
 
-  // Navegaciones: red primero, caché como respaldo (nunca pantalla en blanco).
-  if (e.request.mode === 'navigate') {
+  // App shell y navegaciones: red primero, caché como respaldo. Así el HTML,
+  // el JS y el CSS nunca se mezclan entre versiones (ni pantalla en blanco).
+  const name = url.pathname.split('/').pop();
+  if (e.request.mode === 'navigate' || FRESH.includes(name)) {
+    const cacheKey = e.request.mode === 'navigate' ? './index.html' : e.request;
     e.respondWith(
       fetch(e.request).then(res => {
         if (res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+          caches.open(CACHE).then(c => c.put(cacheKey, copy)).catch(() => {});
         }
         return res;
       }).catch(() =>
-        caches.match('./index.html').then(hit => hit || caches.match('./'))
+        e.request.mode === 'navigate'
+          ? caches.match('./index.html').then(hit => hit || caches.match('./'))
+          : caches.match(e.request)
       )
     );
     return;
