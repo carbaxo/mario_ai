@@ -107,7 +107,7 @@ button.hud-pill{font-size:16px;line-height:1}
 #ending-stats span{background:#ffffff14;border:2px solid #ffffff44;border-radius:12px;padding:8px 14px;font-weight:900;color:var(--gold)}
 
 /* ---------- Vista del mundo ---------- */
-#world-view{position:relative;background:var(--night)}
+#world-view{position:relative;background:var(--night);touch-action:none}
 #world{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;display:block}
 #minimap{position:absolute;left:10px;top:10px;width:118px;height:118px;border:3px solid var(--ink);outline:2px solid #ffffff55;background:var(--night);border-radius:12px;opacity:.94;image-rendering:pixelated;z-index:3}
 #objective-hud{position:absolute;right:10px;top:10px;max-width:250px;background:#1a2a4aee;color:white;border:3px solid var(--ink);outline:2px solid #ffffff33;padding:8px 11px;font-size:11px;font-weight:700;z-index:3;border-radius:12px}
@@ -115,16 +115,9 @@ button.hud-pill{font-size:16px;line-height:1}
 .message{display:none;position:absolute;left:50%;transform:translateX(-50%);top:12px;max-width:min(560px,86%);padding:10px 16px;background:#fffef2;border:3px solid var(--ink);border-radius:14px;text-align:center;font-size:13px;font-weight:900;box-shadow:0 5px 0 rgba(0,0,0,.35);z-index:4}
 #kbd-hint{display:none;position:absolute;left:50%;bottom:10px;transform:translateX(-50%);color:#ffffffaa;background:#10182ecc;padding:6px 14px;border-radius:99px;font-size:12px;font-weight:700;z-index:3}
 
-/* Controles táctiles superpuestos */
-.controls{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:flex-end;padding:0 18px 16px;pointer-events:none;z-index:5}
-.dpad{width:158px;height:158px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:5px;pointer-events:none}
-.dpad button{pointer-events:auto;border:3px solid var(--ink);background:#2a3550d9;color:white;font-weight:900;font-size:20px;box-shadow:0 4px 0 #0e1730;border-radius:14px;backdrop-filter:blur(2px)}
-.dpad button:active{transform:translateY(3px);box-shadow:0 1px 0 #0e1730}
-.dpad [data-dir=up],.dpad [data-bdir=up]{grid-column:2;grid-row:1}
-.dpad [data-dir=left],.dpad [data-bdir=left]{grid-column:1;grid-row:2}
-.dpad [data-dir=down],.dpad [data-bdir=down]{grid-column:2;grid-row:3}
-.dpad [data-dir=right],.dpad [data-bdir=right]{grid-column:3;grid-row:2}
-.action{pointer-events:auto;width:86px;height:86px;border-radius:50%;font-size:30px;font-weight:900;color:white;background:linear-gradient(#ff7a7a,#e0393e);border:4px solid var(--ink);box-shadow:0 6px 0 #8e2330;text-shadow:0 2px 0 #0007}
+/* Controles táctiles superpuestos (el movimiento es el joystick flotante) */
+.controls{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:flex-end;align-items:flex-end;padding:0 18px 16px;pointer-events:none;z-index:5}
+.action{pointer-events:auto;width:92px;height:92px;border-radius:50%;font-size:32px;font-weight:900;color:white;background:linear-gradient(#ff7a7a,#e0393e);border:4px solid var(--ink);box-shadow:0 6px 0 #8e2330;text-shadow:0 2px 0 #0007}
 .action:active{transform:translateY(4px);box-shadow:0 2px 0 #8e2330}
 @media(pointer:fine){.controls{display:none}#kbd-hint{display:block}}
 
@@ -143,18 +136,18 @@ button.hud-pill{font-size:16px;line-height:1}
 .hero-plate{left:10px;top:10px}
 .rival-plate{right:10px;top:10px}
 
-/* Joystick flotante: aparece donde pones el dedo */
-#joy-base{display:none;position:absolute;width:116px;height:116px;margin:-58px 0 0 -58px;border-radius:50%;border:3px solid #ffffff66;background:#0d173044;backdrop-filter:blur(1px);z-index:8;pointer-events:none}
-#joy-base.on{display:block}
-#joy-stick{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe9a0,#ffce00 70%);border:3px solid var(--ink);box-shadow:0 4px 8px #0008;transform:translate(-50%,-50%)}
+/* Joystick flotante: aparece donde pones el dedo (mundo y partidos) */
+.joy-base{display:none;position:absolute;width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;border:3px solid #ffffff66;background:#0d173044;backdrop-filter:blur(1px);z-index:8;pointer-events:none}
+.joy-base.on{display:block}
+.joy-stick{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe9a0,#ffce00 70%);border:3px solid var(--ink);box-shadow:0 4px 8px #0008;transform:translate(-50%,-50%)}
 
-/* Botones de acción flotantes del partido */
-.action-cluster{position:absolute;right:14px;bottom:16px;display:flex;align-items:flex-end;gap:10px;z-index:7}
-.action-cluster button{width:58px;height:58px;border-radius:50%;border:3px solid var(--ink);background:#2a3550d9;font-size:23px;box-shadow:0 4px 0 #0e1730;backdrop-filter:blur(2px);color:white}
-.action-cluster button.big{width:76px;height:76px;font-size:30px;background:#e0393ed9}
+/* Botones de acción flotantes del partido (bien grandes) */
+.action-cluster{position:absolute;right:16px;bottom:18px;display:flex;align-items:flex-end;gap:14px;z-index:7}
+.action-cluster button{width:76px;height:76px;border-radius:50%;border:3px solid var(--ink);background:#2a3550d9;font-size:30px;box-shadow:0 5px 0 #0e1730;backdrop-filter:blur(2px);color:white}
+.action-cluster button.big{width:98px;height:98px;font-size:40px;background:#e0393ed9}
 .action-cluster button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #0e1730}
 .action-cluster button:disabled{opacity:.35}
-#drink-btn{position:absolute;right:14px;bottom:110px;width:52px;height:52px;border-radius:50%;border:3px solid var(--ink);background:#2a3550d9;font-size:20px;box-shadow:0 4px 0 #0e1730;z-index:7}
+#drink-btn{position:absolute;right:16px;bottom:138px;width:62px;height:62px;border-radius:50%;border:3px solid var(--ink);background:#2a3550d9;font-size:24px;box-shadow:0 4px 0 #0e1730;z-index:7}
 #drink-btn:disabled{opacity:.35}
 #drink-btn i{position:absolute;right:-5px;top:-5px;width:22px;height:22px;border-radius:50%;background:var(--gold);color:var(--ink);border:2px solid var(--ink);font-style:normal;font-size:11px;font-weight:900;line-height:18px}
 #quit-btn{position:absolute;left:14px;bottom:16px;width:46px;height:46px;border-radius:50%;border:3px solid var(--ink);background:#0d1730c9;font-size:17px;box-shadow:0 4px 0 #0e1730;z-index:7}
@@ -297,11 +290,12 @@ button.hud-pill{font-size:16px;line-height:1}
  .nameplate{width:min(170px,30vw);padding:4px 7px}
  .np-face{width:22px;height:22px;border-width:2px}
  .np-row b{font-size:10px}
- .action-cluster{right:10px;bottom:12px;gap:8px}
- .action-cluster button{width:48px;height:48px;font-size:19px}
- .action-cluster button.big{width:62px;height:62px;font-size:24px}
- #drink-btn{right:10px;bottom:90px;width:44px;height:44px;font-size:17px}
+ .action-cluster{right:12px;bottom:12px;gap:10px}
+ .action-cluster button{width:62px;height:62px;font-size:25px}
+ .action-cluster button.big{width:80px;height:80px;font-size:33px}
+ #drink-btn{right:12px;bottom:112px;width:52px;height:52px;font-size:20px}
  #quit-btn{left:10px;bottom:12px;width:40px;height:40px;font-size:15px}
+ .action{width:74px;height:74px;font-size:26px}
  #matchup{top:78px;font-size:9px}
  #battle-text{font-size:11px;padding:6px 12px;bottom:10px}
  .result-card{padding:14px}

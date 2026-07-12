@@ -5,7 +5,7 @@
    - Recursos estáticos: caché primero para que el juego vaya rápido y offline.
    IMPORTANTE: al cambiar cualquier fichero del juego, sube la versión de CACHE
    (y la etiqueta de versión del título en index.html). */
-const CACHE = 'futmon-world-v6';
+const CACHE = 'futmon-world-v7';
 const CORE = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',

@@ -25,7 +25,7 @@
    <p>De entrenador desconocido a leyenda mundial.</p>
    <button id="new-game-btn" class="story-button">NUEVA PARTIDA</button>
    <button id="continue-btn" class="ghost-button">CONTINUAR</button>
-   <small id="build-tag">v6</small>
+   <small id="build-tag">v7</small>
   </div>
  </section>
 
@@ -77,13 +77,8 @@
   <div id="objective-hud"><small>OBJETIVO</small><b id="objective-text">Habla con el ojeador</b></div>
   <div id="world-message" class="message">Usa los controles para explorar</div>
   <div id="kbd-hint">WASD / Flechas para moverte · Espacio o E para interactuar</div>
+  <div id="wjoy-base" class="joy-base"><div id="wjoy-stick" class="joy-stick"></div></div>
   <div class="controls">
-   <div class="dpad">
-    <button data-dir="up" aria-label="Arriba">▲</button>
-    <button data-dir="left" aria-label="Izquierda">◀</button>
-    <button data-dir="down" aria-label="Abajo">▼</button>
-    <button data-dir="right" aria-label="Derecha">▶</button>
-   </div>
    <button id="action-btn" class="action" aria-label="Acción">A</button>
   </div>
  </section>
@@ -105,7 +100,7 @@
    <p id="matchup"></p>
    <p id="battle-text"></p>
    <p id="battle-keys">🎮 WASD/Flechas mover · Espacio PASE · X CHUTE · C SEGADA</p>
-   <div id="joy-base"><div id="joy-stick"></div></div>
+   <div id="joy-base" class="joy-base"><div id="joy-stick" class="joy-stick"></div></div>
    <div class="action-cluster">
     <button data-baction="slide" aria-label="Segada">🦵</button>
     <button data-baction="shoot" class="big" aria-label="Chute">🎯</button>
@@ -154,13 +149,14 @@
    <div class="help">
     <h3>🗺️ Explora</h3>
     <p>Recorre las cuatro regiones: <b>Villa Cantera</b>, <b>Ciudad Solar</b>, <b>Bosque Cantera</b> y <b>Distrito Nocturno</b>. Camina por la <b>hierba alta</b> para encontrar futbolistas. Cada región tiene jugadores distintos: velocidad en Ciudad Solar, cerebro y defensa en el Bosque, estrellas nocturnas en el Distrito.</p>
-    <h3>⚽ El duelo: partido 1 contra 1, ¡y manejas tú!</h3>
-    <p>1. Cada duelo es un <b>mini partido en tiempo real</b>, como el FIFA: en móvil, <b>pon el dedo en el campo y arrastra</b> — aparece un joystick flotante (en teclado, WASD/flechas). El primero en marcar <b>3 goles</b> gana.<br>
-    2. <b>⚽ PASE</b> (Espacio): toque al hueco para dejar atrás al rival y correr hacia el balón.<br>
-    3. <b>🎯 CHUTE</b> (X): dispara a portería. El portero automático se mueve siguiendo el balón: <b>muévete en vertical para descolocarlo</b> y chuta al lado libre.<br>
-    4. <b>🦵 SEGADA</b> (C): barrida para robar el balón cuando lo lleve el rival. Si fallas, tu jugador tarda en levantarse.<br>
-    5. <b>🥤 Turbo</b>: la bebida isotónica te da velocidad ×1.4 durante 8 segundos.<br>
-    6. Si pierdes, despiertas en el centro médico y pierdes unas monedas.</p>
+    <h3>⚽ El duelo: ¡partido 3 contra 3 sin porteros!</h3>
+    <p>1. Cada duelo es un <b>mini partido en tiempo real</b>: tu capitán y tus 2 mejores fichajes contra el equipo del rival. En móvil, <b>pon el dedo en el campo y arrastra</b> — aparece un joystick flotante (en teclado, WASD/flechas). El primero en marcar <b>3 goles</b> gana.<br>
+    2. Controlas al jugador con la <b>flecha amarilla</b>: cambia solo al más cercano al balón.<br>
+    3. <b>⚽ PASE</b> (Espacio): se la das al compañero mejor situado.<br>
+    4. <b>🎯 CHUTE</b> (X): no hay porteros, pero <b>los rivales bloquean los tiros con el cuerpo</b> — busca un hueco libre antes de chutar.<br>
+    5. <b>🦵 SEGADA</b> (C): barrida para robar el balón. Si fallas, tu jugador tarda en levantarse.<br>
+    6. <b>🥤 Turbo</b>: la bebida isotónica da velocidad ×1.4 durante 8 segundos.<br>
+    7. Si pierdes, despiertas en el centro médico y pierdes unas monedas.</p>
     <h3>✍️ Si ganas, lo fichas</h3>
     <p>Tras el <b>pitido final</b>, lanza un <b>balón contrato</b> al rival: cuanto mayor sea la goleada (3-0 mejor que 3-2), mayor el <b>% de éxito</b>. Si te rechaza, puedes volver a intentarlo mientras te queden balones.</p>
     <h3>⭐ Tu capitán importa</h3>
@@ -170,7 +166,7 @@
     <h3>🕶️ El Entrenador Sombra</h3>
     <p>Un rival misterioso espera en el Estadio Central. A su capitán no se le puede fichar: <b>gánale el partido</b> para expulsarlo. Derrótalo para avanzar en la historia… y prepárate para la revancha final.</p>
     <h3>🎮 Controles</h3>
-    <p>Móvil: cruceta y botón A. Teclado: <b>WASD / flechas</b> para moverte, <b>Espacio / E</b> para interactuar, <b>Esc</b> para volver al mapa.</p>
+    <p>Móvil: <b>arrastra el dedo por la pantalla</b> (joystick flotante) y botón A para interactuar. Teclado: <b>WASD / flechas</b> para moverte, <b>Espacio / E</b> para interactuar, <b>Esc</b> para volver al mapa.</p>
    </div>
   </div>
  </section>
