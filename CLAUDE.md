@@ -22,8 +22,8 @@ Proyecto fan no oficial: sin fotografías ni escudos oficiales; los retratos son
 | `app.js` | Todo el motor. Organizado en secciones comentadas: helpers → mapa → datos → estado → audio → vistas → render → movimiento → interacción → batalla → historia → paneles → entrada → arranque. |
 | `styles.css` | Estilos por bloques, encabezados `/* ---------- */`. Variables en `:root`. |
 | `assets/portraits/*.webp` | Un retrato por jugador; el nombre de fichero es el `id` del jugador en `STARS`. |
-| `manifest.webmanifest` | Manifest PWA: instalable en Android, `display: fullscreen` y `orientation: landscape`. |
-| `sw.js` | Service worker: precachea la app (juego offline). **Sube la versión de `CACHE` en cada cambio de ficheros del juego** o los jugadores no recibirán la actualización. |
+| `manifest.webmanifest` | Manifest PWA: instalable en Android, `display: standalone` (no uses `fullscreen`: da fallos de arranque en algunos Android) y `orientation: landscape`. |
+| `sw.js` | Service worker: navegación con red-primero (el arranque nunca depende de la caché) y estáticos con caché-primero. **Sube la versión de `CACHE` en cada cambio de ficheros del juego, junto con `#build-tag` en `index.html`** o los jugadores no recibirán la actualización. |
 | `assets/icons/*.png` | Iconos PWA (192, 512 y maskable), generados por código con canvas. |
 | `.github/workflows/pages.yml` | Publica en GitHub Pages en cada push a `main`. |
 
