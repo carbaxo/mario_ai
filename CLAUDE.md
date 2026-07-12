@@ -22,6 +22,9 @@ Proyecto fan no oficial: sin fotografías ni escudos oficiales; los retratos son
 | `app.js` | Todo el motor. Organizado en secciones comentadas: helpers → mapa → datos → estado → audio → vistas → render → movimiento → interacción → batalla → historia → paneles → entrada → arranque. |
 | `styles.css` | Estilos por bloques, encabezados `/* ---------- */`. Variables en `:root`. |
 | `assets/portraits/*.webp` | Un retrato por jugador; el nombre de fichero es el `id` del jugador en `STARS`. |
+| `manifest.webmanifest` | Manifest PWA: instalable en Android, `display: fullscreen` y `orientation: landscape`. |
+| `sw.js` | Service worker: precachea la app (juego offline). **Sube la versión de `CACHE` en cada cambio de ficheros del juego** o los jugadores no recibirán la actualización. |
+| `assets/icons/*.png` | Iconos PWA (192, 512 y maskable), generados por código con canvas. |
 | `.github/workflows/pages.yml` | Publica en GitHub Pages en cada push a `main`. |
 
 ## Arquitectura de app.js
@@ -48,6 +51,8 @@ Smoke test recomendado con Playwright (Chromium): cargar la página, comprobar q
 ## Convenciones
 
 - Mantén el juego **mobile-first**: controles táctiles superpuestos (media query `pointer:coarse`) y teclado en escritorio. Cualquier función nueva debe ser usable con ambos.
+- En móvil el juego es **solo apaisado**: el manifest bloquea `landscape` en la PWA instalada, `goLandscape()` intenta pantalla completa + `orientation.lock` en el navegador, y `#rotate-overlay` (CSS puro, `pointer:coarse + portrait`) tapa el juego en vertical. Hay un bloque de estilos compactos para alturas ≤540px apaisadas: si añades UI, revísala también ahí.
+- Rutas siempre **relativas** (`./…`) en manifest y service worker: GitHub Pages sirve bajo subruta.
 - Los `id` de jugadores/entrenadores son claves estables (saves, retratos): no los renombres.
 - El canvas del mundo es 960×528 (20×11 casillas de 48px); si cambias `TILE`/`VIEW_*`, actualiza también el atributo del canvas en `index.html` y el tamaño de `vignette`.
 - Al añadir jugadores a `STARS`: añade su retrato `.webp`, inclúyelo en algún pool de `ENCOUNTER_POOLS` y revisa los objetivos de capítulo que cuentan plantilla (`checkProgress`).

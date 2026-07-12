@@ -214,3 +214,72 @@ button.hud-pill{font-size:16px;line-height:1}
 #flash{pointer-events:none;position:absolute;z-index:40;inset:0;background:white;opacity:0}
 #flash.go{animation:flash .55s steps(2)}
 @keyframes flash{50%{opacity:1}}
+
+/* ---------- Aviso de rotación: el juego es apaisado en móvil ---------- */
+#rotate-overlay{display:none;position:fixed;inset:0;z-index:99;background:#0b1220;color:white;text-align:center;flex-direction:column;justify-content:center;align-items:center;gap:10px;padding:32px}
+#rotate-overlay .phone{font-size:64px;animation:rotate-hint 1.8s ease-in-out infinite}
+#rotate-overlay h2{margin:0;font-size:26px}
+#rotate-overlay p{margin:0;color:#aebed2}
+@keyframes rotate-hint{0%,15%{transform:rotate(0)}55%,100%{transform:rotate(90deg)}}
+@media (pointer:coarse) and (orientation:portrait){#rotate-overlay{display:flex}}
+
+/* ---------- Móvil apaisado: interfaz compacta (poca altura) ---------- */
+@media (orientation:landscape) and (max-height:540px){
+ :root{--header-h:44px;--nav-h:44px}
+ #game-header{height:var(--header-h);padding:4px 12px}
+ #game-header small{display:none}
+ #game-header strong{font-size:14px}
+ .hud-pill{padding:4px 9px;font-size:12px}
+ #game-nav{height:var(--nav-h)}
+ #game-nav button{display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px}
+ #game-nav button span{font-size:10px}
+ #minimap{width:80px;height:80px}
+ #objective-hud{max-width:200px;font-size:9px;padding:5px 8px}
+ .message{font-size:11px;padding:7px 12px}
+ .controls{padding:0 10px 8px}
+ .dpad{width:116px;height:116px}
+ .dpad button{font-size:15px}
+ .action{width:62px;height:62px;font-size:21px;border-width:4px}
+ .battlefield{flex-basis:48%}
+ .crowd{height:20px;margin-top:6px;border-block-width:3px}
+ #turn-banner{top:3px;padding:3px 12px;font-size:10px}
+ .fighter canvas{width:96px;height:96px}
+ .fighter.rival{top:26px}
+ .fighter:before{width:90px;height:20px}
+ .fighter.rival:before{top:74px}
+ .nameplate{width:min(190px,32vw);padding:5px 8px}
+ .np-row b{font-size:11px}
+ .hp{height:9px;margin-top:4px}
+ .nameplate small{font-size:10px;margin-top:2px}
+ .battle-box{padding:8px 12px;gap:4px}
+ #battle-text{min-height:20px;font-size:12px}
+ #matchup{font-size:9px;padding:3px 7px}
+ .battle-menu{gap:6px}
+ .battle-menu button{min-height:38px;padding:3px 8px}
+ .battle-menu button b{font-size:11px}
+ .battle-menu button small{font-size:8px;margin-top:1px}
+ .tut-card{padding:14px;max-width:400px}
+ .tut-card h3{font-size:15px}
+ .tut-card p{font-size:12px;margin-bottom:10px}
+ .tut-card .story-button{padding:9px}
+ .panel{padding:12px}
+ .cinematic{padding:14px}
+ .title-content{padding-top:5vh}
+ .title-content h1{font-size:clamp(40px,14vh,64px)}
+ .title-content p{margin:10px 0 14px;font-size:13px}
+ .story-button,.ghost-button{padding:10px;margin:6px auto;font-size:13px}
+ .cinematic-head{padding-top:2px}
+ .cinematic-head h2{font-size:20px;margin:4px}
+ .cinematic-head p{font-size:12px;margin:4px}
+ .coach-grid{grid-template-columns:repeat(5,1fr);gap:8px;margin:10px auto}
+ .coach-card{min-height:0;padding:8px}
+ .coach-face{width:38px;height:38px;font-size:15px;border-width:2px;margin-bottom:5px}
+ .coach-card h3{font-size:10px}
+ .coach-card p{font-size:8px}
+ .coach-card b{font-size:8px}
+ .story-scene h2{font-size:22px;margin:4px 0}
+ .story-scene>p{min-height:0;font-size:13px}
+ #story-art,#story-art-ending{height:76px;font-size:40px;margin:8px 0;border-width:2px}
+ .dialog{bottom:12px;padding:12px}
+ .dialog p{font-size:13px}
+}

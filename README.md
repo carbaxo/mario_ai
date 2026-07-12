@@ -10,10 +10,17 @@ RPG web de fútbol tipo *monster-catcher*, en español y sin dependencias. Recor
 - 🧑‍🏫 Cinco entrenadores jugables, cada uno con una habilidad única de combate.
 - 🪙 Economía: monedas por victoria, tiendas, cofres con recompensas, bebidas isotónicas y centro médico.
 - 🔊 Efectos de sonido sintetizados con WebAudio (silenciables) y tutorial integrado en el primer duelo.
+- 📱 PWA instalable en Android, siempre en horizontal (apaisado) y jugable sin conexión.
 
 ## Jugar
 
 La versión publicada está disponible en GitHub Pages.
+
+### Instalar en Android
+
+1. Abre el juego en Chrome (Android).
+2. Menú ⋮ → **«Añadir a pantalla de inicio»** / **«Instalar aplicación»**.
+3. Ábrelo desde el icono: se ejecuta a pantalla completa, bloqueado en horizontal y funciona sin conexión.
 
 ## Desarrollo local
 

@@ -1071,7 +1071,17 @@ function renderCoaches() {
     sfx('select'); renderCoaches();
   });
 }
-function startNewGame() { selectedCoach = null; renderCoaches(); showView('coach-view'); }
+/* En móvil, al empezar a jugar intentamos pantalla completa + orientación
+   apaisada (requiere gesto del usuario; instalada como PWA ya viene bloqueada). */
+async function goLandscape() {
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  try {
+    await document.documentElement.requestFullscreen?.();
+    await screen.orientation?.lock?.('landscape');
+  } catch { /* el navegador puede denegarlo: el aviso de rotación cubre ese caso */ }
+}
+
+function startNewGame() { goLandscape(); selectedCoach = null; renderCoaches(); showView('coach-view'); }
 function confirmCoach() {
   if (!selectedCoach) return;
   state = { ...DEFAULT, coach: selectedCoach, storySeen: true };
@@ -1079,6 +1089,7 @@ function confirmCoach() {
   showStory(0);
 }
 function continueGame() {
+  goLandscape();
   if (!state.coach) return startNewGame();
   showView('world-view');
 }
@@ -1128,6 +1139,10 @@ $('#shop-close').onclick = () => $('#shop').classList.remove('show');
 $('#sound-btn').onclick = () => { state.muted = !state.muted; save(); sfx('select'); };
 
 /* ---------------- Arranque y bucle principal ---------------- */
+// PWA: service worker para jugar sin conexión e instalar en Android.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* p. ej. file:// o sin permisos */ });
+}
 syncPlayer();
 updateHud();
 $('#zone-name').textContent = zone();
