@@ -28,9 +28,9 @@ const STARS=[
  ,{id:'musiala',name:'Jamal Musiala',short:'JM',pos:'MED',rating:90,color:'#c33a4c',moves:['Slalom mágico','Toque sutil']}
  ,{id:'saliba',name:'William Saliba',short:'WS',pos:'DEF',rating:88,color:'#355da2',moves:['Cierre perfecto','Choque limpio']}
 ];
-const PORTRAITS=new Image();PORTRAITS.src='assets/player-portraits.png';
+const PORTRAITS=new Image();PORTRAITS.src='assets/player-portraits.webp';
 function portraitIndex(id){return Math.max(0,STARS.findIndex(p=>p.id===id))}
-function portraitStyle(id){const i=portraitIndex(id),x=(i%4)*100/3,y=Math.floor(i/4)*100/3;return `background-image:url('assets/player-portraits.png');background-size:400% 400%;background-position:${x}% ${y}%;background-repeat:no-repeat`}
+function portraitStyle(id){const i=portraitIndex(id),x=(i%4)*100/3,y=Math.floor(i/4)*100/3;return `background-image:url('assets/player-portraits.webp');background-size:400% 400%;background-position:${x}% ${y}%;background-repeat:no-repeat`}
 const DEFAULT={x:7,y:7,balls:6,coins:100,owned:['lamine'],captain:'lamine',hp:100,level:5,wins:0,steps:0,chests:[]};let state=load(),battle=null,moving=false,held=null,moveTimer=0,animFrame=0;
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 function load(){try{return{...DEFAULT,...JSON.parse(localStorage.getItem('futmon-world')||'{}')}}catch{return{...DEFAULT}}}function save(){localStorage.setItem('futmon-world',JSON.stringify(state));updateHud()}
