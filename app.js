@@ -113,11 +113,11 @@ STARS.forEach(p => { const img = new Image(); img.src = portraitPath(p.id); PORT
 const portraitStyle = id => `background-image:url('${portraitPath(id)}');background-size:cover;background-position:center top;background-repeat:no-repeat`;
 
 const COACHES = [
-  { id: 'mourinho', name: 'José Mourinho', initials: 'JM', philosophy: 'Carácter y defensa', skill: 'La presión bloquea 22 en vez de 12', skin: '#c99572', hair: '#313139', suit: '#202a38', accent: '#9da7b3' },
-  { id: 'guardiola', name: 'Pep Guardiola', initials: 'PG', philosophy: 'Posesión y control', skill: 'El regate hace un 20% más de daño', skin: '#c88d67', hair: '#70533e', suit: '#252a34', accent: '#65b9e8' },
+  { id: 'mourinho', name: 'José Mourinho', initials: 'JM', philosophy: 'Carácter y defensa', skill: 'La segada alcanza más lejos', skin: '#c99572', hair: '#313139', suit: '#202a38', accent: '#9da7b3' },
+  { id: 'guardiola', name: 'Pep Guardiola', initials: 'PG', philosophy: 'Posesión y control', skill: 'Los pases van más rápido', skin: '#c88d67', hair: '#70533e', suit: '#252a34', accent: '#65b9e8' },
   { id: 'ancelotti', name: 'Carlo Ancelotti', initials: 'CA', philosophy: 'Calma y equilibrio', skill: 'Los fichajes tienen un 8% más de éxito', skin: '#d3a17e', hair: '#d5d1c8', suit: '#263143', accent: '#f1f1ef' },
-  { id: 'zidane', name: 'Zinedine Zidane', initials: 'ZZ', philosophy: 'Técnica y liderazgo', skill: 'Doble probabilidad de jugada perfecta', skin: '#b97b5b', hair: '#5a493e', suit: '#183b6a', accent: '#f0e6d3' },
-  { id: 'luis', name: 'Luis Enrique', initials: 'LE', philosophy: 'Intensidad y valentía', skill: 'El disparo casi nunca se va fuera', skin: '#c98e69', hair: '#5a4639', suit: '#273a55', accent: '#d34242' },
+  { id: 'zidane', name: 'Zinedine Zidane', initials: 'ZZ', philosophy: 'Técnica y liderazgo', skill: 'El chute es más preciso', skin: '#b97b5b', hair: '#5a493e', suit: '#183b6a', accent: '#f0e6d3' },
+  { id: 'luis', name: 'Luis Enrique', initials: 'LE', philosophy: 'Intensidad y valentía', skill: 'El chute es más potente', skin: '#c98e69', hair: '#5a4639', suit: '#273a55', accent: '#d34242' },
 ];
 
 const CHAPTERS = [
@@ -758,40 +758,30 @@ function buy(kind) {
   save(); sfx('chest'); openShop();
 }
 
-/* ---------------- Batalla: partido 1 contra 1 al mejor de 3 goles ----------------
-   El duelo se juega sobre un mini-campo animado (#pitch): eliges una jugada por
-   ronda, tu jugada también define cómo defiendes el contraataque rival, y el
-   primero en marcar 3 goles gana. Si ganas el partido, puedes fichar al rival. */
-const PLAY_NAMES = { dribble: 'Regate', shot: 'Disparo', press: 'Presión' };
+/* ---------------- Batalla: partido 1c1 en tiempo real (estilo FIFA) ----------------
+   Manejas a tu capitán con la cruceta/WASD sobre el mini-campo (#pitch):
+   PASE (toque al hueco), CHUTE (a portería) y SEGADA (robar el balón).
+   Porteros automáticos en cada portería. Primero en marcar 3 goles gana;
+   si ganas el partido, puedes fichar al rival. */
 const GOALS_TO_WIN = 3;
 
-function posBonus(att, def) { // puntos porcentuales del triángulo táctico
-  if (BEATS[att] === def) return 10;
-  if (BEATS[def] === att) return -8;
-  return 0;
+/* ---- Geometría del mini-campo (#pitch, canvas 960×420) ---- */
+const pitchCanvas = $('#pitch');
+const pctx = pitchCanvas.getContext('2d');
+const PITCH = { x: 60, y: 116, w: 840, h: 268 };
+const PCY = PITCH.y + PITCH.h / 2;   // centro vertical del campo
+const MOUTH = 52;                    // media altura de la boca de portería
+const fieldXY = (fx, fy) => [PITCH.x + fx * PITCH.w, PITCH.y + fy * PITCH.h];
+
+/* ---- Entrada del partido (cruceta táctil + teclado) ---- */
+const battleKeys = { up: false, down: false, left: false, right: false };
+function battleMove() {
+  let x = (battleKeys.right ? 1 : 0) - (battleKeys.left ? 1 : 0);
+  let y = (battleKeys.down ? 1 : 0) - (battleKeys.up ? 1 : 0);
+  if (x && y) { x *= .707; y *= .707; }
+  return { x, y };
 }
-// Probabilidad (0-1) de que tu jugada acabe en gol. Se muestra en vivo en cada botón.
-function goalChance(type) {
-  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
-  const r = battle.rival;
-  let c = { dribble: 40, shot: 55, press: 20 }[type];
-  if (r.pos === 'POR') c += type === 'shot' ? -15 : type === 'dribble' ? 10 : 0;
-  else c += posBonus(hero.pos, r.pos);
-  if (hero.pos === 'POR') c -= 6; // los porteros no definen bien
-  if (type === 'dribble' && state.coach === 'guardiola') c += 8;
-  if (type === 'shot' && state.coach === 'luis') c += 8;
-  c += Math.min(10, state.level - 5); // el nivel del míster suma poco a poco
-  if (battle.boss) c -= 8;
-  return clamp(c, 5, 90) / 100;
-}
-// Probabilidad de que el rival marque en su contraataque, según tu última jugada.
-function rivalChance(afterType) {
-  const r = battle.rival;
-  let c = 30 + Math.round((r.rating - 89) * 1.5) + (battle.boss ? battle.bossPower : 0);
-  if (afterType === 'shot') c += 12;                                   // el disparo te deja vendido
-  if (afterType === 'press') c -= state.coach === 'mourinho' ? 26 : 18; // la presión seca al rival
-  return clamp(c, 4, 85) / 100;
-}
+
 // Fichaje tras ganar el partido: cuanto mayor la goleada, más fácil convencerle.
 function captureChance() {
   if (!battle || battle.boss || battle.finished !== 'win') return 0;
@@ -821,19 +811,18 @@ function startEncounter() {
   const ids = ENCOUNTER_POOLS[zone()] || STARS.map(s => s.id);
   const available = STARS.filter(s => ids.includes(s.id) && s.id !== state.captain);
   const rival = available[Math.floor(Math.random() * available.length)];
-  beginBattle({ rival, boss: false, bossPower: 0 });
+  beginBattle({ rival, boss: false });
 }
-function startBossBattle(power) {
+function startBossBattle(extra) {
   sfx('boss');
-  beginBattle({ rival: SOMBRA_STAR, boss: true, bossPower: power });
+  beginBattle({ rival: SOMBRA_STAR, boss: true, bossExtra: extra || 0 });
 }
-function beginBattle({ rival, boss, bossPower }) {
+function beginBattle({ rival, boss, bossExtra = 0 }) {
   battle = {
-    rival, boss, bossPower,
+    rival, boss, bossExtra,
     myGoals: 0, rivalGoals: 0,
-    busy: false, finished: null, rewarded: false,
-    drinkShield: false, lastPlay: null,
-    scene: { mode: 'idle', t0: 0, dur: 1, result: null },
+    mode: 'pause', finished: null, rewarded: false, busy: false,
+    stats: null, sim: null, boost: 0,
     confetti: [], shake: 0,
   };
   held = null;
@@ -844,9 +833,28 @@ function beginBattle({ rival, boss, bossPower }) {
     setupBattle();
   }, 450);
 }
+/* Atributos del partido según tu capitán, tu entrenador y el rival. */
+function makeStats(hero, r, boss, extra) {
+  const hr = (hero.rating - 84) / 10;
+  return {
+    mySpeed: .15 + hr * .02 + (hero.pos === 'MED' ? .014 : 0),
+    passSpeed: .42 + (state.coach === 'guardiola' ? .1 : 0) + (hero.pos === 'MED' ? .04 : 0),
+    shotSpeed: .55 + hr * .05 + (hero.pos === 'DEL' ? .06 : 0) + (state.coach === 'luis' ? .06 : 0),
+    shotSpread: Math.max(10, 34 - hr * 10 - (hero.pos === 'DEL' ? 8 : 0) - (state.coach === 'zidane' ? 9 : 0)),
+    tackleRange: 34 + (hero.pos === 'DEF' ? 10 : 0) + (state.coach === 'mourinho' ? 9 : 0),
+    myKeeperR: 25 + (hero.pos === 'POR' ? 12 : 0),
+    foeSpeed: clamp(.105 + (r.rating - 84) * .004 + (boss ? .028 : 0) + extra * .001, .1, .175),
+    foeTackleProb: .45 + (boss ? .18 : 0),
+    foeShootRange: 230 + (boss ? 40 : 0),
+    foeSpread: Math.max(12, 40 - (r.rating - 88) * 3 - (boss ? 10 : 0) - extra),
+    foeShotSpeed: .55 + (r.rating - 88) * .01 + (boss ? .08 : 0),
+    foeKeeperR: 24 + (boss ? 8 : 0) + Math.round(extra / 3),
+  };
+}
 function setupBattle() {
   const hero = STARS.find(s => s.id === state.captain) || STARS[0];
   const r = battle.rival;
+  battle.stats = makeStats(hero, r, battle.boss, battle.bossExtra);
   const zoneClass = { 'Ciudad Solar': 'zone-solar', 'Bosque Cantera': 'zone-bosque', 'Distrito Nocturno': 'zone-noche', 'Estadio Central': 'zone-estadio' }[zone()] || '';
   $('#battlefield').className = `battlefield ${zoneClass}`;
   $('#rival-name').textContent = r.name;
@@ -857,25 +865,34 @@ function setupBattle() {
   $('#hero-pos').textContent = hero.pos; $('#hero-pos').className = `pos-badge ${hero.pos}`;
   $('#hero-face').style.cssText = portraitStyle(hero.id);
   $('#rival-face').style.cssText = r.id === 'sombra' ? 'background:#191430' : portraitStyle(r.id);
-  // Pista táctica para que el emparejamiento se entienda de un vistazo.
-  let hint;
-  if (battle.boss) hint = '⚠️ Jefe: no se puede fichar. ¡Gana el partido para expulsarlo!';
-  else if (r.pos === 'POR') hint = `${hero.pos} vs POR — el portero rival resiste disparos: prueba el regate.`;
-  else {
-    const b = posBonus(hero.pos, r.pos);
-    hint = b > 0 ? `${hero.pos} vs ${r.pos} — ¡ventaja táctica! Tus jugadas suman +10% de gol.`
-      : b < 0 ? `${hero.pos} vs ${r.pos} — desventaja táctica: −8% de gol.`
-      : `${hero.pos} vs ${r.pos} — duelo igualado.`;
-  }
-  $('#matchup').textContent = '🔺 ' + hint;
-  setBanner('TU JUGADA');
-  battle.scene = { mode: 'idle', t0: performance.now(), dur: 1, result: null };
+  // Pista de ventajas: qué aporta tu capitán y tu entrenador en el campo.
+  const perk = { DEL: 'chute más potente y preciso', MED: 'más velocidad y mejor pase', DEF: 'segada más larga', POR: 'tu portero es gigante' }[hero.pos];
+  const coach = COACHES.find(v => v.id === state.coach);
+  $('#matchup').textContent = `⭐ ${hero.pos}: ${perk}${coach ? ` · 🎓 ${coach.name}: ${coach.skill.toLowerCase()}` : ''}${battle.boss ? ' · ⚠️ Jefe: no se puede fichar' : ''}`;
+  resetPositions(null);
   updateBattle();
   sfx('whistle');
   battleText(battle.boss
-    ? `¡${r.name} pisa el campito entre silbidos! Primero en marcar ${GOALS_TO_WIN} gana.`
+    ? `¡Final contra ${r.name}! Primero en marcar ${GOALS_TO_WIN} goles gana. ¡Muévete y roba el balón!`
     : `¡Duelo contra ${r.name}! Primero en marcar ${GOALS_TO_WIN} goles gana el partido.`);
   if (!state.tutorialSeen) openTutorial();
+  else setTimeout(() => { if (battle && !battle.finished && battle.mode === 'pause') startPlay(null); }, 900);
+}
+function resetPositions(ballTo) {
+  battle.sim = {
+    me:  { x: PITCH.x + PITCH.w * .3, y: PCY, dx: 1, dy: 0, moving: false, slide: 0, sdx: 1, sdy: 0, recover: 0 },
+    foe: { x: PITCH.x + PITCH.w * .7, y: PCY, dx: -1, dy: 0, moving: false, stun: 0, veer: 0, veerT: 0, shootCd: 0, tackleCd: 0 },
+    ball: { x: PITCH.x + PITCH.w / 2, y: PCY, vx: 0, vy: 0, owner: ballTo, noMe: 0, noFoe: 0 },
+    gkL: { y: PCY }, gkR: { y: PCY },
+  };
+}
+function startPlay(ballTo) {
+  if (!battle || battle.finished) return;
+  resetPositions(ballTo);
+  battle.mode = 'play';
+  setBanner('¡JUEGA!');
+  updateBattle();
+  setTimeout(() => { if (battle && battle.mode === 'play') $('#turn-banner').classList.add('hidden'); }, 900);
 }
 function updateBattle() {
   $('#score-me').textContent = battle.myGoals;
@@ -883,15 +900,10 @@ function updateBattle() {
   const paint = (sel, n) => $$(sel + ' i').forEach((el, i) => el.classList.toggle('scored', i < n));
   paint('#hero-goals', battle.myGoals);
   paint('#rival-goals', battle.rivalGoals);
-  const lock = battle.busy || !!battle.finished;
-  $$('#battle-menu [data-move]').forEach(b => b.disabled = lock);
-  if (!battle.finished) {
-    $('#odds-dribble').textContent = `${Math.round(goalChance('dribble') * 100)}% gol · defensa sólida`;
-    $('#odds-shot').textContent = `${Math.round(goalChance('shot') * 100)}% gol · te expone al contraataque`;
-    $('#odds-press').textContent = `${Math.round(goalChance('press') * 100)}% gol · rival casi bloqueado`;
-  }
-  $('#drink-btn').disabled = lock || state.drinks < 1 || battle.drinkShield;
-  $('#odds-drink').textContent = battle.drinkShield ? '¡portero gigante activado!' : `anula la próxima jugada rival · quedan ${state.drinks}`;
+  const playing = battle.mode === 'play' && !battle.finished;
+  $('#pass-btn').disabled = $('#shoot-btn').disabled = $('#slide-btn').disabled = !playing;
+  $('#drink-btn').disabled = !playing || state.drinks < 1 || battle.boost > 0;
+  $('#odds-drink').textContent = battle.boost > 0 ? '¡turbo activo!' : `velocidad ×1.4 durante 8 s · quedan ${state.drinks}`;
   $('#run-btn').disabled = battle.busy;
   $('#contract-btn').disabled = battle.busy || battle.boss || battle.finished !== 'win' || state.balls < 1;
   $('#contract-odds').textContent = battle.boss ? 'no disponible contra jefes'
@@ -899,84 +911,220 @@ function updateBattle() {
     : state.balls < 1 ? 'sin balones: tienda o cofres'
     : `${state.balls} balones · ${Math.round(captureChance() * 100)}% de éxito`;
 }
-function attack(type) {
-  if (!battle || battle.busy || battle.finished) return;
-  battle.busy = true; battle.lastPlay = type;
-  updateBattle(); sfx('select');
-  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
-  const willGoal = Math.random() < goalChance(type);
-  const golazo = willGoal && Math.random() < (state.coach === 'zidane' ? .18 : .07);
-  setBanner('TU JUGADA');
-  setScene('meRun');
-  battleText(`${hero.name} avanza con el balón…`);
-  setTimeout(() => {
-    if (!battle) return;
-    setScene('meShot', willGoal ? 'goal' : 'save');
-    setTimeout(() => {
-      if (!battle) return;
-      if (willGoal) {
-        battle.myGoals = Math.min(GOALS_TO_WIN, battle.myGoals + (golazo ? 2 : 1));
-        battle.shake = performance.now() + 320;
-        spawnConfetti('foe');
-        popDamage('foe', golazo ? '¡GOLAZO! ×2' : '¡GOL!', golazo ? 'crit' : 'goal');
-        sfx(golazo ? 'crit' : 'goal');
-        battleText(`${hero.name}: ${PLAY_NAMES[type]}… ¡GOOOL${golazo ? 'AZO, vale doble' : ''}! (${battle.myGoals}-${battle.rivalGoals})`);
-      } else {
-        popDamage('foe', type === 'shot' ? '¡FUERA!' : '¡PARADA!', 'miss');
-        sfx('miss');
-        battleText(type === 'press'
-          ? 'Presionas arriba: no llegas a rematar, pero el rival contraatacará frenado.'
-          : `${hero.name}: ${PLAY_NAMES[type]}… ¡el rival la saca!`);
-      }
-      updateBattle();
-      setTimeout(() => {
-        if (!battle) return;
-        if (battle.myGoals >= GOALS_TO_WIN) return winMatch();
-        rivalPlay(type);
-      }, 950);
-    }, 430);
-  }, 700);
+
+/* ---- Acciones del jugador ---- */
+const inPlay = () => battle && battle.mode === 'play' && !battle.finished;
+function aimDir(actor, fallbackX) {
+  const d = Math.hypot(actor.dx, actor.dy) || 1;
+  if (actor.moving || actor.dx || actor.dy) return [actor.dx / d, actor.dy / d];
+  return [fallbackX, 0];
 }
-function rivalPlay(afterType) {
-  setBanner('JUGADA RIVAL', true);
-  const r = battle.rival;
-  const mv = r.moves[Math.floor(Math.random() * r.moves.length)];
-  const shielded = battle.drinkShield;
-  const willGoal = !shielded && Math.random() < rivalChance(afterType);
-  setScene('foeRun');
-  battleText(`${r.name} responde al contraataque…`);
+function doPass() {
+  if (!inPlay() || battle.sim.ball.owner !== 'me') return;
+  const b = battle.sim.ball, me = battle.sim.me;
+  b.x = me.x + (me.dx || 1) * 22; b.y = me.y + (me.dy || 0) * 16 + 14; // balón en los pies
+  const [dx, dy] = aimDir(me, 1);
+  b.owner = null; b.noMe = performance.now() + 280;
+  b.vx = dx * battle.stats.passSpeed; b.vy = dy * battle.stats.passSpeed;
+  sfx('select');
+}
+function doShoot() {
+  if (!inPlay() || battle.sim.ball.owner !== 'me') return;
+  const S = battle.stats, sim = battle.sim, b = sim.ball, me = sim.me;
+  b.x = me.x + (me.dx || 1) * 22; b.y = me.y + (me.dy || 0) * 16 + 14; // balón en los pies
+  // apunta al lado que deja libre el portero, con dispersión según distancia
+  const aimY = sim.gkR.y > PCY ? PCY - MOUTH * .6 : PCY + MOUTH * .6;
+  const far = (PITCH.x + PITCH.w - b.x) / PITCH.w;
+  const ty = aimY + (Math.random() - .5) * S.shotSpread * (1 + far * 1.6);
+  const ang = Math.atan2(ty - b.y, PITCH.x + PITCH.w + 16 - b.x);
+  b.owner = null; b.noMe = performance.now() + 320;
+  b.vx = Math.cos(ang) * S.shotSpeed; b.vy = Math.sin(ang) * S.shotSpeed;
+  sfx('hit');
+}
+function doSlide() {
+  if (!inPlay()) return;
+  const me = battle.sim.me;
+  if (me.slide > 0 || me.recover > 0) return;
+  const [dx, dy] = aimDir(me, 1);
+  me.slide = 300; me.sdx = dx; me.sdy = dy;
+  sfx('bump');
+}
+// Tiempo muerto → turbo: bebida isotónica = velocidad ×1.4 durante 8 segundos.
+function useDrink() {
+  if (!inPlay() || state.drinks < 1 || battle.boost > 0) return;
+  state.drinks--;
+  battle.boost = 8000;
+  save(); sfx('heal');
+  popDamage('me', '¡TURBO!', 'heal');
+  updateBattle();
+}
+
+/* ---- Simulación del partido (se ejecuta desde el bucle principal) ---- */
+function clampActor(a) {
+  a.x = clamp(a.x, PITCH.x + 16, PITCH.x + PITCH.w - 16);
+  a.y = clamp(a.y, PITCH.y + 18, PITCH.y + PITCH.h - 10);
+}
+function updateMatch(dt) {
+  if (!inPlay() || !battle.sim) return;
+  const S = battle.stats, sim = battle.sim, now = performance.now();
+  const me = sim.me, foe = sim.foe, b = sim.ball;
+  battle.boost = Math.max(0, battle.boost - dt);
+  // --- tu capitán ---
+  if (me.slide > 0) {
+    me.slide -= dt;
+    me.x += me.sdx * .3 * dt; me.y += me.sdy * .3 * dt;
+    if (b.owner === 'foe' && Math.hypot(foe.x - me.x, foe.y - me.y) < S.tackleRange + 8) {
+      b.owner = null; b.x = foe.x; b.y = foe.y + 8;
+      b.vx = me.sdx * .25; b.vy = me.sdy * .25;
+      b.noFoe = now + 420; foe.stun = 500;
+      popDamage('center', '¡ROBO!', 'goal'); sfx('hit');
+    }
+    if (me.slide <= 0) me.recover = 430;
+  } else {
+    if (me.recover > 0) me.recover -= dt;
+    const mv = battleMove();
+    const sp = S.mySpeed * (battle.boost > 0 ? 1.4 : 1) * (me.recover > 0 ? .45 : 1);
+    me.x += mv.x * sp * dt; me.y += mv.y * sp * dt;
+    if (mv.x || mv.y) { me.dx = mv.x; me.dy = mv.y; me.moving = true; } else me.moving = false;
+  }
+  clampActor(me);
+  updateFoe(dt, now);
+  updateBall(dt, now);
+  updateKeepers(dt);
+}
+function updateFoe(dt, now) {
+  const S = battle.stats, sim = battle.sim, foe = sim.foe, me = sim.me, b = sim.ball;
+  if (foe.stun > 0) { foe.stun -= dt; foe.moving = false; return; }
+  let tx, ty;
+  if (b.owner === 'foe') {
+    // conduce hacia tu portería, cambiando de carril si le cierras el paso
+    if (Math.abs(me.x - foe.x) < 100 && Math.abs(me.y - foe.y) < 52 && now > foe.veerT) {
+      foe.veer = (me.y >= foe.y ? -1 : 1) * (55 + Math.random() * 55);
+      foe.veerT = now + 900;
+    }
+    tx = PITCH.x + 40;
+    ty = clamp(PCY + (foe.veer || 0), PITCH.y + 30, PITCH.y + PITCH.h - 24);
+    if (foe.x - PITCH.x < S.foeShootRange && now > foe.shootCd) {
+      foe.shootCd = now + 800;
+      if (Math.random() < .55) foeShoot();
+    }
+  } else if (!b.owner) {
+    tx = b.x; ty = b.y;
+  } else {
+    // te persigue e intenta quitártela
+    tx = me.x + 30; ty = me.y;
+    if (Math.hypot(me.x - foe.x, me.y - foe.y) < 42 && now > foe.tackleCd) {
+      foe.tackleCd = now + 1100;
+      if (Math.random() < S.foeTackleProb) {
+        b.owner = null;
+        b.vx = (Math.random() - .5) * .35; b.vy = (Math.random() - .5) * .35;
+        b.noMe = now + 260;
+        popDamage('center', '¡TE LA QUITA!', 'bad'); sfx('miss');
+      }
+    }
+  }
+  const dx = tx - foe.x, dy = ty - foe.y, d = Math.hypot(dx, dy) || 1;
+  const step = Math.min(S.foeSpeed * dt, d);
+  foe.x += dx / d * step; foe.y += dy / d * step;
+  foe.moving = d > 4;
+  if (foe.moving) { foe.dx = dx / d; foe.dy = dy / d; }
+  clampActor(foe);
+}
+function foeShoot() {
+  const S = battle.stats, sim = battle.sim, b = sim.ball, foe = sim.foe;
+  b.x = foe.x + (foe.dx || -1) * 22; b.y = foe.y + (foe.dy || 0) * 16 + 14; // balón en los pies
+  const aimY = sim.gkL.y > PCY ? PCY - MOUTH * .6 : PCY + MOUTH * .6;
+  const ty = aimY + (Math.random() - .5) * S.foeSpread;
+  const ang = Math.atan2(ty - b.y, PITCH.x - 16 - b.x);
+  b.owner = null; b.noFoe = performance.now() + 320;
+  b.vx = Math.cos(ang) * S.foeShotSpeed; b.vy = Math.sin(ang) * S.foeShotSpeed;
+  sfx('hit');
+}
+function updateBall(dt, now) {
+  const S = battle.stats, sim = battle.sim, me = sim.me, foe = sim.foe, b = sim.ball;
+  if (b.owner) {
+    const o = b.owner === 'me' ? me : foe;
+    b.x = o.x + (o.dx || (b.owner === 'me' ? 1 : -1)) * 22;
+    b.y = o.y + (o.dy || 0) * 16 + 14;
+    b.vx = b.vy = 0;
+  } else {
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const f = Math.pow(.9982, dt);
+    b.vx *= f; b.vy *= f;
+    if (b.y < PITCH.y + 8)          { b.y = PITCH.y + 8; b.vy = Math.abs(b.vy); }
+    if (b.y > PITCH.y + PITCH.h - 6){ b.y = PITCH.y + PITCH.h - 6; b.vy = -Math.abs(b.vy); }
+  }
+  handleGoalLines(now);
+  if (battle.mode !== 'play') return; // se marcó gol en esta misma pasada
+  if (!b.owner && Math.hypot(b.vx, b.vy) < .28) { // los balones rápidos no se controlan al vuelo
+    if (now > b.noMe && me.slide <= 0 && me.recover <= 0 && Math.hypot(me.x - b.x, me.y - b.y) < 26) b.owner = 'me';
+    else if (now > b.noFoe && foe.stun <= 0 && Math.hypot(foe.x - b.x, foe.y - b.y) < 26) b.owner = 'foe';
+  }
+}
+function handleGoalLines(now) {
+  const S = battle.stats, sim = battle.sim, b = sim.ball;
+  const fast = Math.abs(b.vx) > .15;
+  // portería izquierda (la tuya)
+  if (b.x <= PITCH.x + 8) {
+    if (Math.abs(b.y - PCY) <= MOUTH) {
+      if (Math.abs(b.y - sim.gkL.y) <= S.myKeeperR) clearBall('L');
+      else if (fast || b.owner === 'foe') return goalFor('foe');
+      else clearBall('L');
+    } else { b.x = PITCH.x + 9; b.vx = Math.abs(b.vx) * .6; }
+  }
+  // portería derecha (la del rival)
+  if (b.x >= PITCH.x + PITCH.w - 8) {
+    if (Math.abs(b.y - PCY) <= MOUTH) {
+      if (Math.abs(b.y - sim.gkR.y) <= S.foeKeeperR) clearBall('R');
+      else if (fast || b.owner === 'me') return goalFor('me');
+      else clearBall('R');
+    } else { b.x = PITCH.x + PITCH.w - 9; b.vx = -Math.abs(b.vx) * .6; }
+  }
+}
+function clearBall(side) {
+  const b = battle.sim.ball;
+  b.owner = null;
+  b.x = side === 'L' ? PITCH.x + 34 : PITCH.x + PITCH.w - 34;
+  b.vx = (side === 'L' ? 1 : -1) * .38;
+  b.vy = (Math.random() - .5) * .34;
+  b.noMe = b.noFoe = performance.now() + 200;
+  popDamage(side === 'L' ? 'me' : 'foe', '¡PARADÓN!', side === 'L' ? 'heal' : 'miss');
+  sfx('miss');
+}
+function updateKeepers(dt) {
+  const sim = battle.sim, b = sim.ball;
+  for (const gk of [sim.gkL, sim.gkR]) {
+    const target = clamp(b.y, PCY - MOUTH + 8, PCY + MOUTH - 8);
+    gk.y += clamp(target - gk.y, -.09 * dt, .09 * dt);
+  }
+}
+function goalFor(side) {
+  battle.mode = 'pause';
+  battle.shake = performance.now() + 350;
+  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
+  if (side === 'me') {
+    battle.myGoals++;
+    spawnConfetti('foe');
+    popDamage('foe', '¡GOL!', 'goal'); sfx('goal');
+    setBanner('¡GOOOL!');
+    battleText(`¡GOOOL de ${hero.name}! (${battle.myGoals}-${battle.rivalGoals})`);
+  } else {
+    battle.rivalGoals++;
+    popDamage('me', 'GOL RIVAL', 'bad'); sfx('concede');
+    setBanner('GOL RIVAL', true);
+    battleText(`${battle.rival.name} marca… (${battle.myGoals}-${battle.rivalGoals})`);
+  }
+  updateBattle();
   setTimeout(() => {
     if (!battle) return;
-    setScene('foeShot', willGoal ? 'goal' : 'save');
-    setTimeout(() => {
-      if (!battle) return;
-      if (shielded) {
-        battle.drinkShield = false;
-        popDamage('me', '¡PARADÓN!', 'heal'); sfx('heal');
-        battleText(`${r.name} usa ${mv}… ¡pero tras el tiempo muerto tu portero lo detiene todo!`);
-      } else if (willGoal) {
-        battle.rivalGoals++;
-        battle.shake = performance.now() + 320;
-        popDamage('me', 'GOL RIVAL', 'bad'); sfx('concede');
-        battleText(`${r.name} usa ${mv}… y marca. (${battle.myGoals}-${battle.rivalGoals})`);
-      } else {
-        popDamage('me', '¡SALVADA!', 'miss'); sfx('miss');
-        battleText(`${r.name} usa ${mv}, ¡pero la sacas bajo palos!`);
-      }
-      updateBattle();
-      setTimeout(() => {
-        if (!battle) return;
-        if (battle.rivalGoals >= GOALS_TO_WIN) return loseMatch();
-        battle.busy = false;
-        setBanner('TU JUGADA');
-        updateBattle();
-      }, 950);
-    }, 430);
-  }, 700);
+    if (battle.myGoals >= GOALS_TO_WIN) return winMatch();
+    if (battle.rivalGoals >= GOALS_TO_WIN) return loseMatch();
+    startPlay(side === 'me' ? 'foe' : 'me');
+    battleText(side === 'me' ? '¡Saca el rival: defiende!' : '¡Sacas tú: al ataque!');
+  }, 1500);
 }
 function winMatch() {
-  battle.finished = 'win'; battle.busy = false;
-  battle.scene = { mode: 'idle', t0: performance.now(), dur: 1, result: null };
+  battle.finished = 'win'; battle.mode = 'pause';
   spawnConfetti('foe'); spawnConfetti('me');
   sfx('whistle');
   let prize = 0;
@@ -995,7 +1143,7 @@ function winMatch() {
   updateBattle();
 }
 function loseMatch() {
-  battle.finished = 'loss'; battle.busy = false;
+  battle.finished = 'loss'; battle.mode = 'pause';
   setBanner('DERROTA', true);
   sfx('fail');
   state.coins = Math.max(0, state.coins - 15);
@@ -1013,16 +1161,6 @@ function bossVictory() {
   battleText(`¡Ganas la final ${battle.myGoals}-${battle.rivalGoals}! Sombra se retira. +200 🪙 y +5 balones contrato.`);
   updateBattle();
   setTimeout(() => { if (!battle) return; endBattle('bosswin'); checkProgress(); }, 2200);
-}
-// Tiempo muerto: la bebida garantiza que la próxima jugada rival acabe en parada.
-function useDrink() {
-  if (!battle || battle.busy || battle.finished || state.drinks < 1 || battle.drinkShield) return;
-  state.drinks--;
-  battle.drinkShield = true;
-  save(); sfx('heal');
-  popDamage('me', '🥤', 'heal');
-  battleText('Tiempo muerto: bebida isotónica. ¡Tu portero parará seguro la próxima jugada rival!');
-  updateBattle();
 }
 function contract() {
   if (!battle || battle.busy || battle.boss || battle.finished !== 'win') return;
@@ -1052,6 +1190,7 @@ function contract() {
 }
 function endBattle(result) {
   battle = null;
+  Object.keys(battleKeys).forEach(k => battleKeys[k] = false);
   if (result === 'defeat') {
     state.x = 6; state.y = 7;
     syncPlayer(); save();
@@ -1066,42 +1205,7 @@ function endBattle(result) {
   maybeShowStory();
 }
 
-/* ---- Renderizado del mini-campo (#pitch) ---- */
-const pitchCanvas = $('#pitch');
-const pctx = pitchCanvas.getContext('2d');
-const PITCH = { x: 60, y: 116, w: 840, h: 268 }; // campo dentro del canvas 960×420
-const easeIO = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-const fieldXY = (fx, fy) => [PITCH.x + fx * PITCH.w, PITCH.y + fy * PITCH.h];
-
-function setScene(mode, result = null) {
-  if (!battle) return;
-  const dur = mode.endsWith('Run') ? 680 : mode.endsWith('Shot') ? 420 : 1;
-  battle.scene = { mode, result, t0: performance.now(), dur };
-}
-// Posiciones de los dos jugadores y el balón según la fase de la escena.
-function scenePositions(time) {
-  const me = { x: .2, y: .55, dir: 'right', walking: false };
-  const foe = { x: .8, y: .55, dir: 'left', walking: false };
-  const ball = { x: .5, y: .62, air: 0 };
-  const s = battle.scene;
-  const k = Math.min(1, (time - s.t0) / (s.dur || 1));
-  if (s.mode === 'meRun') {
-    me.x = .2 + easeIO(k) * .32; me.walking = k < 1;
-    ball.x = me.x + .05; ball.air = Math.abs(Math.sin(time / 90)) * 5;
-  } else if (s.mode === 'foeRun') {
-    foe.x = .8 - easeIO(k) * .32; foe.walking = k < 1;
-    ball.x = foe.x - .05; ball.air = Math.abs(Math.sin(time / 90)) * 5;
-  } else if (s.mode === 'meShot') {
-    me.x = .52;
-    if (s.result === 'goal') { ball.x = .58 + k * .41; ball.air = Math.sin(k * Math.PI) * 34; }
-    else { ball.x = .58 + k * .3; ball.air = Math.sin(k * Math.PI) * 46; foe.x = .8 + easeIO(k) * .09; foe.walking = k < 1; }
-  } else if (s.mode === 'foeShot') {
-    foe.x = .48;
-    if (s.result === 'goal') { ball.x = .42 - k * .41; ball.air = Math.sin(k * Math.PI) * 34; }
-    else { ball.x = .42 - k * .3; ball.air = Math.sin(k * Math.PI) * 46; me.x = .2 - easeIO(k) * .07; me.walking = k < 1; }
-  }
-  return { me, foe, ball };
-}
+/* ---- Renderizado del mini-campo ---- */
 function spawnConfetti(side) {
   const [gx, gy] = fieldXY(side === 'foe' ? .97 : .03, .5);
   const colors = ['#ffce00', '#45d9ff', '#ff5b7d', '#7dff6e', '#ffffff'];
@@ -1116,31 +1220,33 @@ function spawnConfetti(side) {
 }
 function drawGoalFrame(x, cy) {
   pctx.fillStyle = '#ffffff';
-  rr(pctx, x - 12, cy - 58, 24, 116, 8); pctx.fill();
-  pctx.lineWidth = 4; pctx.strokeStyle = INK; rr(pctx, x - 12, cy - 58, 24, 116, 8); pctx.stroke();
+  rr(pctx, x - 12, cy - MOUTH - 6, 24, MOUTH * 2 + 12, 8); pctx.fill();
+  pctx.lineWidth = 4; pctx.strokeStyle = INK; rr(pctx, x - 12, cy - MOUTH - 6, 24, MOUTH * 2 + 12, 8); pctx.stroke();
   pctx.strokeStyle = '#00000030'; pctx.lineWidth = 1.5;
-  for (let i = -7; i <= 7; i += 5) { pctx.beginPath(); pctx.moveTo(x + i, cy - 54); pctx.lineTo(x + i, cy + 54); pctx.stroke(); }
-  for (let j = -52; j <= 52; j += 12) { pctx.beginPath(); pctx.moveTo(x - 9, cy + j); pctx.lineTo(x + 9, cy + j); pctx.stroke(); }
+  for (let i = -7; i <= 7; i += 5) { pctx.beginPath(); pctx.moveTo(x + i, cy - MOUTH); pctx.lineTo(x + i, cy + MOUTH); pctx.stroke(); }
+  for (let j = -MOUTH + 4; j <= MOUTH - 4; j += 12) { pctx.beginPath(); pctx.moveTo(x - 9, cy + j); pctx.lineTo(x + 9, cy + j); pctx.stroke(); }
 }
 function drawPitchActor(x, y, look, dir, time, walking, opts = {}) {
-  const s = 1.75;
+  const s = opts.scale || 1.75;
   pctx.save();
-  pctx.translate(x - 24 * s, y - 46 * s);
+  pctx.translate(x, y);
+  if (opts.lying) pctx.rotate((opts.lieSign >= 0 ? 1 : -1) * 1.2);
+  pctx.translate(-24 * s, -46 * s);
   pctx.scale(s, s);
   drawActor(pctx, 0, 0, look, dir, time / 85, walking, opts);
   pctx.restore();
 }
-function drawBall(ball, time) {
-  const [bx, by] = fieldXY(ball.x, ball.y);
-  const air = ball.air || 0;
+function drawBallAt(bx, by, time, speed) {
   pctx.fillStyle = 'rgba(0,0,0,.25)';
-  pctx.beginPath(); pctx.ellipse(bx, by + 9, 10, 4, 0, 0, Math.PI * 2); pctx.fill();
+  pctx.beginPath(); pctx.ellipse(bx, by + 7, 10, 4, 0, 0, Math.PI * 2); pctx.fill();
   pctx.fillStyle = 'white';
-  pctx.beginPath(); pctx.arc(bx, by - air, 9, 0, Math.PI * 2); pctx.fill();
+  pctx.beginPath(); pctx.arc(bx, by - 4, 9, 0, Math.PI * 2); pctx.fill();
   pctx.lineWidth = 2.5; pctx.strokeStyle = INK; pctx.stroke();
+  const spin = time / (140 - Math.min(90, speed * 140));
   pctx.fillStyle = INK;
-  pctx.beginPath(); pctx.arc(bx + Math.sin(time / 140) * 3.5, by - air - Math.cos(time / 140) * 3.5, 3, 0, Math.PI * 2); pctx.fill();
+  pctx.beginPath(); pctx.arc(bx + Math.sin(spin) * 3.5, by - 4 - Math.cos(spin) * 3.5, 3, 0, Math.PI * 2); pctx.fill();
 }
+const actorFacing = dirOf => Math.abs(dirOf.dx) >= Math.abs(dirOf.dy || 0) ? (dirOf.dx >= 0 ? 'right' : 'left') : (dirOf.dy > 0 ? 'down' : 'up');
 function drawPitch(time) {
   const W = pitchCanvas.width, H = pitchCanvas.height;
   pctx.clearRect(0, 0, W, H);
@@ -1168,27 +1274,51 @@ function drawPitch(time) {
   pctx.strokeStyle = '#ffffffd9'; pctx.lineWidth = 4;
   pctx.strokeRect(PITCH.x, PITCH.y, PITCH.w, PITCH.h);
   pctx.beginPath(); pctx.moveTo(PITCH.x + PITCH.w / 2, PITCH.y); pctx.lineTo(PITCH.x + PITCH.w / 2, PITCH.y + PITCH.h); pctx.stroke();
-  pctx.beginPath(); pctx.arc(PITCH.x + PITCH.w / 2, PITCH.y + PITCH.h / 2, 50, 0, Math.PI * 2); pctx.stroke();
-  pctx.strokeRect(PITCH.x, PITCH.y + PITCH.h / 2 - 68, 66, 136);
-  pctx.strokeRect(PITCH.x + PITCH.w - 66, PITCH.y + PITCH.h / 2 - 68, 66, 136);
+  pctx.beginPath(); pctx.arc(PITCH.x + PITCH.w / 2, PCY, 50, 0, Math.PI * 2); pctx.stroke();
+  pctx.strokeRect(PITCH.x, PCY - 68, 66, 136);
+  pctx.strokeRect(PITCH.x + PITCH.w - 66, PCY - 68, 66, 136);
   pctx.restore();
   pctx.lineWidth = 5; pctx.strokeStyle = INK;
   rr(pctx, PITCH.x - 16, PITCH.y - 14, PITCH.w + 32, PITCH.h + 30, 20); pctx.stroke();
-  // porterías
-  drawGoalFrame(PITCH.x - 26, PITCH.y + PITCH.h / 2);
-  drawGoalFrame(PITCH.x + PITCH.w + 26, PITCH.y + PITCH.h / 2);
-  // jugadores y balón
-  const { me, foe, ball } = scenePositions(time);
-  const hero = STARS.find(s => s.id === state.captain) || STARS[0];
-  const meLook = { skin: '#f2b98a', hair: '#3a2b20', suit: hero.color, accent: '#ffffff' };
-  const foeLook = battle.rival.id === 'sombra'
-    ? { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }
-    : { skin: '#e8ab7c', hair: '#241a12', suit: battle.rival.color, accent: '#ffffff' };
-  const [mx, my] = fieldXY(me.x, me.y);
-  const [fx, fy] = fieldXY(foe.x, foe.y);
-  drawPitchActor(mx, my, meLook, me.dir, time, me.walking);
-  drawPitchActor(fx, fy, foeLook, foe.dir, time, foe.walking, battle.rival.id === 'sombra' ? { eyes: '#ff3355', aura: true } : {});
-  drawBall(ball, time);
+  drawGoalFrame(PITCH.x - 26, PCY);
+  drawGoalFrame(PITCH.x + PITCH.w + 26, PCY);
+  const sim = battle.sim;
+  if (sim) {
+    const hero = STARS.find(s => s.id === state.captain) || STARS[0];
+    const meLook = { skin: '#f2b98a', hair: '#3a2b20', suit: hero.color, accent: '#ffffff' };
+    const foeLook = battle.rival.id === 'sombra'
+      ? { skin: '#4a4066', hair: '#161226', suit: '#191430', accent: '#ff3355' }
+      : { skin: '#e8ab7c', hair: '#241a12', suit: battle.rival.color, accent: '#ffffff' };
+    const gkLook = { skin: '#f2b98a', hair: '#4a3521', suit: '#95a3bd', accent: '#e8edf5' };
+    // porteros
+    drawPitchActor(PITCH.x + 4, sim.gkL.y + 30, gkLook, 'right', time, true, { scale: 1.35 });
+    drawPitchActor(PITCH.x + PITCH.w - 4, sim.gkR.y + 30, gkLook, 'left', time, true, { scale: 1.35 });
+    // estela de turbo
+    if (battle.boost > 0) {
+      pctx.strokeStyle = '#45d9ff88'; pctx.lineWidth = 4; pctx.lineCap = 'round';
+      for (let i = 1; i <= 3; i++) {
+        pctx.beginPath();
+        pctx.moveTo(sim.me.x - sim.me.dx * 14 * i, sim.me.y - 10 - sim.me.dy * 14 * i);
+        pctx.lineTo(sim.me.x - sim.me.dx * (14 * i + 12), sim.me.y - 10 - sim.me.dy * (14 * i + 12));
+        pctx.stroke();
+      }
+      pctx.lineCap = 'butt';
+    }
+    // jugadores
+    drawPitchActor(sim.me.x, sim.me.y, meLook, actorFacing(sim.me), time, sim.me.moving,
+      { lying: sim.me.slide > 0 || sim.me.recover > 200, lieSign: sim.me.sdx });
+    drawPitchActor(sim.foe.x, sim.foe.y, foeLook, actorFacing(sim.foe), time, sim.foe.moving,
+      battle.rival.id === 'sombra' ? { eyes: '#ff3355', aura: true } : {});
+    // flecha sobre tu jugador
+    const ay = sim.me.y - 92 + Math.sin(time / 220) * 4;
+    pctx.fillStyle = '#ffce00'; pctx.strokeStyle = INK; pctx.lineWidth = 2.5;
+    pctx.beginPath();
+    pctx.moveTo(sim.me.x, ay); pctx.lineTo(sim.me.x - 9, ay - 13); pctx.lineTo(sim.me.x + 9, ay - 13);
+    pctx.closePath(); pctx.fill(); pctx.stroke();
+    // balón
+    const speed = Math.hypot(sim.ball.vx, sim.ball.vy);
+    drawBallAt(sim.ball.x, sim.ball.y, time, speed);
+  }
   // confeti
   battle.confetti = battle.confetti.filter(p => (p.life -= 16) > 0);
   for (const p of battle.confetti) {
@@ -1203,9 +1333,9 @@ function drawPitch(time) {
 
 /* Tutorial de combate (solo la primera vez). */
 const TUTORIAL = [
-  { t: '⚽ ¡Partido 1 contra 1!', x: 'Un mini partido en el campito: el primero en marcar 3 goles gana. En cada ronda eliges una jugada, y cada botón muestra tu % de gol en vivo.' },
-  { t: '🔺 Ataque y defensa', x: 'Tu jugada también define tu defensa: el Disparo es potente pero te expone al contraataque; la Presión apenas marca pero seca al rival. Y el triángulo DEL > MED > DEF > DEL cambia tus porcentajes (el portero rival resiste disparos).' },
-  { t: '✍️ Si ganas, lo fichas', x: 'Gana el partido y lanza el balón contrato tras el pitido final. Cuanto mayor sea la goleada, más fácil será convencerle. ¡Suerte, míster!' },
+  { t: '⚽ ¡Manejas tú!', x: 'Como en el FIFA: mueve a tu capitán con la cruceta (o WASD/flechas). El primero en marcar 3 goles gana el partido.' },
+  { t: '🎮 Pase, chute y segada', x: 'PASE (Espacio): toque al hueco para dejar atrás al rival. CHUTE (X): dispara buscando el lado que deja libre el portero. SEGADA (C): barrida para robar el balón — si fallas, tardas en levantarte. 🥤 = turbo de velocidad.' },
+  { t: '✍️ Si ganas, lo fichas', x: 'Tras el pitido final, lanza el balón contrato: cuanto mayor sea la goleada, más fácil convencerle. ¡Suerte, míster!' },
 ];
 let tutStep = 0;
 function openTutorial() {
@@ -1222,6 +1352,7 @@ function nextTutorial() {
   if (tutStep >= TUTORIAL.length) {
     $('#battle-tutorial').classList.remove('show');
     state.tutorialSeen = true; save();
+    if (battle && !battle.finished && battle.mode === 'pause') startPlay(null);
   } else renderTutorial();
 }
 
@@ -1337,11 +1468,18 @@ $$('[data-dir]').forEach(b => {
 const KEYMAP = { ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down', ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right' };
 document.addEventListener('keydown', e => {
   const dir = KEYMAP[e.key];
+  if (battle) {
+    if ($('#battle-tutorial').classList.contains('show') && [' ', 'e', 'E', 'Enter'].includes(e.key)) { e.preventDefault(); return nextTutorial(); }
+    if (dir) { e.preventDefault(); battleKeys[dir] = true; return; }
+    if ([' ', 'z', 'Z', 'j', 'J'].includes(e.key)) { e.preventDefault(); return doPass(); }
+    if (['x', 'X', 'k', 'K'].includes(e.key)) { e.preventDefault(); return doShoot(); }
+    if (['c', 'C', 'l', 'L'].includes(e.key)) { e.preventDefault(); return doSlide(); }
+    return;
+  }
   if (dir) { e.preventDefault(); held = dir; tryMove(dir); return; }
   if ([' ', 'e', 'E', 'Enter'].includes(e.key)) {
     e.preventDefault();
-    if ($('#battle-tutorial').classList.contains('show')) return nextTutorial();
-    if (!battle) action();
+    action();
   }
   if (e.key === 'Escape') {
     if ($('#shop').classList.contains('show')) { $('#shop').classList.remove('show'); return; }
@@ -1349,7 +1487,7 @@ document.addEventListener('keydown', e => {
     if (!battle && !['title-view', 'coach-view', 'story-view', 'ending-view'].some(id => $('#' + id).classList.contains('active'))) showView('world-view');
   }
 });
-document.addEventListener('keyup', e => { if (KEYMAP[e.key] === held) held = null; });
+document.addEventListener('keyup', e => { const d = KEYMAP[e.key]; if (d) { if (d === held) held = null; battleKeys[d] = false; } });
 
 $('#action-btn').onclick = action;
 $('#dialog-next').onclick = closeDialog;
@@ -1358,7 +1496,17 @@ $('#nav-team').onclick = () => showView('team-view');
 $('#nav-journal').onclick = () => showView('journal-view');
 $('#nav-help').onclick = () => showView('help-view');
 $$('.close-panel').forEach(b => b.onclick = () => showView('world-view'));
-$$('[data-move]').forEach(b => b.onclick = () => attack(b.dataset.move));
+$('#pass-btn').onclick = doPass;
+$('#shoot-btn').onclick = doShoot;
+$('#slide-btn').onclick = doSlide;
+$$('[data-bdir]').forEach(b => {
+  b.onpointerdown = e => { e.preventDefault(); battleKeys[b.dataset.bdir] = true; };
+  b.onpointerup = b.onpointerleave = b.onpointercancel = () => { battleKeys[b.dataset.bdir] = false; };
+});
+$$('[data-baction]').forEach(b => b.onpointerdown = e => {
+  e.preventDefault();
+  ({ pass: doPass, shoot: doShoot, slide: doSlide })[b.dataset.baction]();
+});
 $('#drink-btn').onclick = useDrink;
 $('#contract-btn').onclick = contract;
 $('#run-btn').onclick = () => { if (battle && !battle.busy) endBattle('flee'); };
@@ -1396,6 +1544,7 @@ function loop(t) {
     drawWorld(t);
     drawMinimap(t);
   } else if (battle && $('#battle-view').classList.contains('active')) {
+    updateMatch(dt);
     drawPitch(t);
   }
   requestAnimationFrame(loop);
