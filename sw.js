@@ -1,8 +1,11 @@
 'use strict';
-/* Service worker de FutMon World: precachea la app para jugar sin conexión.
+/* Service worker de FutMon World.
+   - Navegación (abrir la app): RED PRIMERO con respaldo en caché — el arranque
+     desde el icono nunca depende de una caché rota.
+   - Recursos estáticos: caché primero para que el juego vaya rápido y offline.
    IMPORTANTE: al cambiar cualquier fichero del juego, sube la versión de CACHE
-   para que los jugadores reciban la actualización. */
-const CACHE = 'futmon-world-v5';
+   (y la etiqueta de versión del título en index.html). */
+const CACHE = 'futmon-world-v6';
 const CORE = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
@@ -13,8 +16,7 @@ const CORE = [
   './assets/portraits/musiala.webp', './assets/portraits/saliba.webp',
 ];
 
-// Precaché tolerante: un fichero que falle no debe impedir instalar la app;
-// lo que falte se cachea después en el manejador de fetch.
+// Precaché tolerante: un fichero que falle no impide instalar la app.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
@@ -31,11 +33,27 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Caché primero, red como respaldo. Las navegaciones (abrir la app desde el
-// icono) nunca deben quedarse en blanco: si todo falla, se sirve el index cacheado.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+
+  // Navegaciones: red primero, caché como respaldo (nunca pantalla en blanco).
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() =>
+        caches.match('./index.html').then(hit => hit || caches.match('./'))
+      )
+    );
+    return;
+  }
+
+  // Resto: caché primero, red como respaldo.
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
       if (res.ok) {
@@ -43,6 +61,6 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
       }
       return res;
-    })).catch(() => (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined))
+    }))
   );
 });
