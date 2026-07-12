@@ -87,12 +87,12 @@
   </div>
  </section>
 
- <!-- Batalla: partido 1c1 en el mini campito -->
+ <!-- Batalla: partido 1c1 en tiempo real, a pantalla completa -->
  <section id="battle-view" class="view">
   <div class="battlefield" id="battlefield">
    <canvas id="pitch" width="960" height="420" aria-label="Mini campo de fútbol"></canvas>
    <div id="scoreboard"><b id="score-me">0</b><span>–</span><b id="score-rival">0</b></div>
-   <div id="turn-banner">TU JUGADA</div>
+   <div id="turn-banner">¡JUEGA!</div>
    <article class="nameplate hero-plate">
     <div class="np-row"><span class="np-face" id="hero-face"></span><b id="hero-name"></b><span class="pos-badge" id="hero-pos">DEL</span><span class="lvl">NV <i id="hero-level"></i></span></div>
     <div class="goals" id="hero-goals"><i></i><i></i><i></i></div>
@@ -101,38 +101,31 @@
     <div class="np-row"><span class="np-face" id="rival-face"></span><b id="rival-name"></b><span class="pos-badge" id="rival-pos">DEL</span><span class="lvl">NV <i id="rival-level"></i></span></div>
     <div class="goals" id="rival-goals"><i></i><i></i><i></i></div>
    </article>
-   <div class="controls battle-controls">
-    <div class="dpad">
-     <button data-bdir="up" aria-label="Arriba">▲</button>
-     <button data-bdir="left" aria-label="Izquierda">◀</button>
-     <button data-bdir="down" aria-label="Abajo">▼</button>
-     <button data-bdir="right" aria-label="Derecha">▶</button>
-    </div>
-    <div class="action-cluster">
-     <button data-baction="slide" aria-label="Segada">🦵</button>
-     <button data-baction="shoot" class="big" aria-label="Chute">🎯</button>
-     <button data-baction="pass" aria-label="Pase">⚽</button>
-    </div>
-   </div>
-  </div>
-  <div class="battle-box">
-   <p id="battle-text"></p>
    <p id="matchup"></p>
+   <p id="battle-text"></p>
    <p id="battle-keys">🎮 WASD/Flechas mover · Espacio PASE · X CHUTE · C SEGADA</p>
-   <div class="battle-menu" id="battle-menu">
-    <button id="pass-btn"><b>⚽ Pase</b><small>Espacio · toque al hueco</small></button>
-    <button id="shoot-btn"><b>🎯 Chute</b><small>X · busca el lado libre del portero</small></button>
-    <button id="slide-btn"><b>🦵 Segada</b><small>C · barrida para robar el balón</small></button>
-    <button id="drink-btn"><b>🥤 Turbo</b><small id="odds-drink">velocidad ×1.4 durante 8 s</small></button>
-    <button id="contract-btn" class="gold"><b>⚽ Fichar</b><small id="contract-odds">gana el partido para fichar</small></button>
-    <button id="run-btn"><b>🏃 Abandonar</b><small>volver al mapa</small></button>
+   <div id="joy-base"><div id="joy-stick"></div></div>
+   <div class="action-cluster">
+    <button data-baction="slide" aria-label="Segada">🦵</button>
+    <button data-baction="shoot" class="big" aria-label="Chute">🎯</button>
+    <button data-baction="pass" aria-label="Pase">⚽</button>
    </div>
-  </div>
-  <div id="battle-tutorial">
-   <div class="tut-card">
-    <h3 id="tut-title"></h3>
-    <p id="tut-text"></p>
-    <button id="tut-next" class="story-button">Entendido</button>
+   <button id="drink-btn" aria-label="Turbo"><span>🥤</span><i id="drink-badge">2</i></button>
+   <button id="quit-btn" aria-label="Abandonar el partido">🏳️</button>
+   <div id="match-result">
+    <div class="result-card">
+     <h3 id="result-title">¡VICTORIA!</h3>
+     <p id="result-copy"></p>
+     <button id="contract-btn"><b>⚽ Fichar</b><small id="contract-odds"></small></button>
+     <button id="run-btn">Volver al mapa</button>
+    </div>
+   </div>
+   <div id="battle-tutorial">
+    <div class="tut-card">
+     <h3 id="tut-title"></h3>
+     <p id="tut-text"></p>
+     <button id="tut-next" class="story-button">Entendido</button>
+    </div>
    </div>
   </div>
  </section>
@@ -161,7 +154,7 @@
     <h3>🗺️ Explora</h3>
     <p>Recorre las cuatro regiones: <b>Villa Cantera</b>, <b>Ciudad Solar</b>, <b>Bosque Cantera</b> y <b>Distrito Nocturno</b>. Camina por la <b>hierba alta</b> para encontrar futbolistas. Cada región tiene jugadores distintos: velocidad en Ciudad Solar, cerebro y defensa en el Bosque, estrellas nocturnas en el Distrito.</p>
     <h3>⚽ El duelo: partido 1 contra 1, ¡y manejas tú!</h3>
-    <p>1. Cada duelo es un <b>mini partido en tiempo real</b>, como el FIFA: mueve a tu capitán con la <b>cruceta</b> (o WASD/flechas) y el primero en marcar <b>3 goles</b> gana.<br>
+    <p>1. Cada duelo es un <b>mini partido en tiempo real</b>, como el FIFA: en móvil, <b>pon el dedo en el campo y arrastra</b> — aparece un joystick flotante (en teclado, WASD/flechas). El primero en marcar <b>3 goles</b> gana.<br>
     2. <b>⚽ PASE</b> (Espacio): toque al hueco para dejar atrás al rival y correr hacia el balón.<br>
     3. <b>🎯 CHUTE</b> (X): dispara a portería. El portero automático se mueve siguiendo el balón: <b>muévete en vertical para descolocarlo</b> y chuta al lado libre.<br>
     4. <b>🦵 SEGADA</b> (C): barrida para robar el balón cuando lo lleve el rival. Si fallas, tu jugador tarda en levantarse.<br>
